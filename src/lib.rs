@@ -32,7 +32,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         (Some(o), Some(r)) => (o.to_string(), r.to_string()),
         (_, _) => {
             send_response(
-                200,
+                400,
                 vec![(String::from("content-type"), String::from("text/plain"))],
                 "You must provide an owner and repo name."
                     .as_bytes()
@@ -48,8 +48,6 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         .as_str()
         .map(|n| n.to_string());
 
-    let mut message_que = std::collections::VecDeque::new();
-
     let start_msg_str = match &user_name {
         Some(name) => format!(
             "Processing data for owner: {}, repo: {}, and user: {}",
@@ -60,8 +58,13 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             owner, repo
         ),
     };
+    send_response(
+        200,
+        vec![(String::from("content-type"), String::from("text/plain"))],
+        start_msg_str.as_bytes().to_vec(),
+    );
 
-    message_que.push_front(start_msg_str.clone());
+    let mut message_que = std::collections::VecDeque::<String>::new();
 
     let n_days = 7u16;
     let mut report = Vec::<String>::new();
@@ -69,12 +72,12 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let mut _profile_data = String::new();
     match is_valid_owner_repo(&github_token, &owner, &repo).await {
         None => {
-            let error_msg =
-                "You've entered invalid owner/repo, or the target is private. Please try again.";
             send_response(
                 400,
                 vec![(String::from("content-type"), String::from("text/plain"))],
-                error_msg.as_bytes().to_vec(),
+                "You've entered invalid owner/repo, or the target is private. Please try again."
+                    .as_bytes()
+                    .to_vec(),
             );
             return;
         }
@@ -86,17 +89,29 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     match &user_name {
         Some(user_name) => {
             if !is_code_contributor(&github_token, &owner, &repo, &user_name.clone()).await {
-                message_que.push_front(format!(
-                    "{} hasn't contributed code to {}/{}. Bot will try to find out {}'s other contributions.",
-                    user_name, owner, repo, user_name
-                ));
+                send_response(
+                    200,
+                    vec![(String::from("content-type"), String::from("text/plain"))],
+                    format!(
+                        "{} hasn't contributed code to {}/{}. Bot will try to find out {}'s other contributions.",
+                        user_name, owner, repo, user_name
+                    ).as_bytes()
+                    .to_vec(),
+
+                );
             }
         }
         None => {
-            message_que.push_front(format!(
-                "You didn't input a user's name. Bot will then create a report on the weekly progress of {}/{}.",
-                owner, repo
-            ));
+            send_response(
+                200,
+                vec![(String::from("content-type"), String::from("text/plain"))],
+                format!(
+                    "You didn't input a user's name. Bot will then create a report on the weekly progress of {}/{}.",
+                    owner, repo
+                ).as_bytes()
+                .to_vec(),
+
+            );
         }
     }
 
@@ -107,9 +122,12 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
     let start_msg_str =
         format!("exploring {addressee_str} GitHub contributions to `{owner}/{repo}` project");
-    message_que.push_front(start_msg_str.clone());
 
-    let _ = send_response_wrapped(message_que, &mut report).await;
+    send_response(
+        200,
+        vec![(String::from("content-type"), String::from("text/plain"))],
+        start_msg_str.as_bytes().to_vec(),
+    );
 
     let mut commits_summaries = String::new();
     'commits_block: {
@@ -130,7 +148,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     .join("\n");
                 let commits_head_str = format!("found {count} commits");
                 let commits_msg_str = format!("{}:\n{}", commits_head_str.clone(), commits_str);
-                report.push(format!("{}", commits_head_str.clone()));
+                report.push(format!("{}", commits_msg_str.clone()));
                 send_response(
                     200,
                     vec![(String::from("content-type"), String::from("text/plain"))],
@@ -150,7 +168,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     for com in commits_vec {
                         sleep(std::time::Duration::from_secs(2));
                         send_response(
-                            200,
+                            400,
                             vec![(String::from("content-type"), String::from("text/plain"))],
                             com.payload.as_bytes().to_vec(),
                         );
