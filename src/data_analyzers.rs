@@ -160,38 +160,55 @@ pub async fn analyze_commit(
     url: &str,
 ) -> Option<String> {
     let commit_patch_str = format!("{url}.patch");
-    match github_http_fetch(&github_token, &commit_patch_str).await {
-        Some(res) => {
-            let text = String::from_utf8_lossy(res.as_slice()).to_string();
+    let uri = http_req::uri::Uri::try_from(commit_patch_str.as_str())
+        .expect(&format!("Error generating URI from {:?}", commit_patch_str));
+    let mut writer = Vec::new();
+    match http_req::request::Request::new(&uri)
+        .method(http_req::request::Method::GET)
+        .header("User-Agent", "flows-network connector")
+        .header("Content-Type", "plain/text")
+        .header("Authorization", &format!("Bearer {github_token}"))
+        .send(&mut writer)
+    {
+        Ok(res) => {
+            if !res.status_code().is_success() {
+                log::error!("Github http error {:?}", res.status_code());
+                return None;
+            };
 
-            let mut clean_text = String::with_capacity(text.len());
+            let text = String::from_utf8_lossy(writer.as_slice());
+
+            let mut escaped_texts = String::with_capacity(text.len());
             let mut inside_diff_block = false;
-            
+
             let max_length = 18_000;
 
             for line in text.lines() {
-                if clean_text.len() + line.len() > max_length {
-                    let remaining = max_length - clean_text.len();
-                    clean_text.push_str(&line.chars().take(remaining).collect::<String>());
+                if escaped_texts.len() + line.len() > max_length {
+                    let remaining = max_length - escaped_texts.len();
+                    escaped_texts.push_str(&line.chars().take(remaining).collect::<String>());
                     break;
                 }
-            
+
                 if line.starts_with("diff --git") {
                     inside_diff_block = true;
-                    clean_text.push_str(line);
-                    clean_text.push('\n');
+                    escaped_texts.push_str(line);
+                    escaped_texts.push('\n');
                     continue;
                 }
-            
+
                 if inside_diff_block {
-                    if line.chars().any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}') {
+                    if line
+                        .chars()
+                        .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
+                    {
                         continue;
                     }
                 }
-            
-                clean_text.push_str(line);
-                clean_text.push('\n');
-            
+
+                escaped_texts.push_str(line);
+                escaped_texts.push('\n');
+
                 if line.is_empty() {
                     inside_diff_block = false;
                 }
@@ -201,7 +218,7 @@ pub async fn analyze_commit(
             );
 
             let usr_prompt_1 = &format!(
-                "Based on the provided commit patch: {clean_text}, and description: {tag_line}, extract and present the following key elements: a high-level summary of the changes made, and the types of files affected. Prioritize data on changes to code files first, then scripts, and lastly documentation. Pay attention to the file types and ensure the distinction between documentation changes and core code changes, even when the documentation contains highly technical language. Please compile your findings into a list, with each key element represented as a separate item."
+                "Based on the provided commit patch: {escaped_texts}, and description: {tag_line}, extract and present the following key elements: a high-level summary of the changes made, and the types of files affected. Prioritize data on changes to code files first, then scripts, and lastly documentation. Pay attention to the file types and ensure the distinction between documentation changes and core code changes, even when the documentation contains highly technical language. Please compile your findings into a list, with each key element represented as a separate item."
             );
 
             let usr_prompt_2 = &format!(
@@ -223,7 +240,10 @@ pub async fn analyze_commit(
             )
             .await
         }
-        None => None,
+        Err(_e) => {
+            log::error!("Error getting response from Github: {:?}", _e);
+            None
+        }
     }
 }
 

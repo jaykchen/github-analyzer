@@ -41,7 +41,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
     let user_name = _qry.get("username").map(|n| n.to_string());
 
-    let response_message = match &user_name {
+    let start_msg_str = match &user_name {
         Some(name) => format!(
             "Processing data for owner: {}, repo: {}, and user: {}",
             owner, repo, name
@@ -54,7 +54,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     send_response(
         200,
         vec![(String::from("content-type"), String::from("text/plain"))],
-        response_message.as_bytes().to_vec(),
+        start_msg_str.as_bytes().to_vec(),
     );
     let n_days = 7u16;
     let mut report = String::new();
@@ -103,11 +103,9 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         }
     }
 
-    let addressee_str;
-
-    match &user_name {
-        Some(user_name) => addressee_str = format!("{}'s", user_name.clone()),
-        None => addressee_str = String::from("key community participants'"),
+    let addressee_str = match &user_name {
+        Some(user_name) => format!("{}'s", user_name),
+        None => String::from("key community participants'"),
     };
 
     let start_msg_str =
@@ -118,6 +116,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         vec![(String::from("content-type"), String::from("text/plain"))],
         start_msg_str.as_bytes().to_vec(),
     );
+
     let mut commits_summaries = String::new();
     'commits_block: {
         match get_commits_in_range(
@@ -214,15 +213,10 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let a_week_ago = now - Duration::days(n_days as i64);
     let n_days_ago_str = a_week_ago.format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
-    let mut discussion_query = String::new();
-    match &user_name {
-        Some(user_name) => {
-            discussion_query = format!("involves: {user_name} updated:>{n_days_ago_str}",);
-        }
-        None => {
-            discussion_query = format!("updated:>{n_days_ago_str}",);
-        }
-    }
+    let discussion_query = match &user_name {
+        Some(user_name) => format!("involves: {user_name} updated:>{n_days_ago_str}"),
+        None => format!("updated:>{n_days_ago_str}"),
+    };
 
     let mut discussion_data = String::new();
     'discussion_block: {
@@ -267,8 +261,8 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             Some(target_person) => {
                 report = format!(
                     "No useful data found for {}, you may try `/search` to find out more about {}",
-                    target_person.clone(),
-                    target_person.clone()
+                    target_person,
+                    target_person
                 );
             }
 
@@ -282,7 +276,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             Some(&commits_summaries),
             Some(&issues_summaries),
             Some(&discussion_data),
-            Some(&user_name.clone().unwrap().to_string()),
+            user_name.as_deref(),
         )
         .await
         {
