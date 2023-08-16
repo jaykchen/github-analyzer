@@ -18,7 +18,7 @@ pub async fn is_valid_owner_repo(github_token: &str, owner: &str, repo: &str) ->
         "https://api.github.com/repos/{}/{}/community/profile",
         owner, repo
     );
-
+    log::info!("fetching community profile for {community_profile_url}");
     match github_http_fetch(&github_token, &community_profile_url).await {
         Some(res) => match serde_json::from_slice::<CommunityProfile>(&res) {
             Ok(profile) => {

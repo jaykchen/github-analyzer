@@ -41,6 +41,8 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
     let user_name = _qry.get("username").map(|n| n.to_string());
 
+    log::error!("owner: {:?}, repo: {:?}, username: {:?}", owner, repo, user_name);
+    
     let start_msg_str = match &user_name {
         Some(name) => format!(
             "Processing data for owner: {}, repo: {}, and user: {}",
