@@ -143,15 +143,26 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             Some((count, mut commits_vec)) => {
                 let commits_str = commits_vec
                     .iter()
-                    .map(|com| com.source_url.as_str())
-                    .collect::<Vec<&str>>()
+                    .map(|com| {
+                        let sha = com
+                            .source_url
+                            .rsplitn(2, '/')
+                            .nth(0)
+                            .unwrap_or("1234567")
+                            .chars()
+                            .take(7)
+                            .collect::<String>();
+
+                        format!("<a href=\"{}\">{}</a>", com.source_url, sha)
+                    })
+                    .collect::<Vec<String>>()
                     .join("\n");
                 let commits_head_str = format!("found {count} commits");
                 let commits_msg_str = format!("{}:\n{}", commits_head_str.clone(), commits_str);
                 report.push(format!("{}", commits_msg_str.clone()));
                 send_response(
                     200,
-                    vec![(String::from("content-type"), String::from("text/plain"))],
+                    vec![(String::from("content-type"), String::from("text/html"))],
                     commits_msg_str.as_bytes().to_vec(),
                 );
                 if count == 0 {
@@ -168,7 +179,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     for com in commits_vec {
                         sleep(std::time::Duration::from_secs(2));
                         send_response(
-                            400,
+                            200,
                             vec![(String::from("content-type"), String::from("text/plain"))],
                             com.payload.as_bytes().to_vec(),
                         );
