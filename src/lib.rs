@@ -8,7 +8,7 @@ use data_analyzers::*;
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::*;
-use lambda_flows::{request_received, send_response};
+use webhook_flows::{request_received, send_response};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
