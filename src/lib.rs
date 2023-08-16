@@ -9,6 +9,7 @@ use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::*;
 use serde_json::Value;
+use slack_flows::send_message_to_channel;
 use std::env;
 use std::{collections::HashMap, thread::sleep};
 use webhook_flows::{request_received, send_response};
@@ -178,11 +179,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 if !commits_vec.is_empty() {
                     for com in commits_vec {
                         sleep(std::time::Duration::from_secs(2));
-                        send_response(
-                            200,
-                            vec![(String::from("content-type"), String::from("text/plain"))],
-                            com.payload.as_bytes().to_vec(),
-                        );
+                        send_message_to_channel("ik8", "ch_rep", com.payload).await;
                     }
                 }
             }
@@ -227,7 +224,9 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 .await
                 {
                     Some((summary, _, issues_vec)) => {
+                        send_message_to_channel("ik8", "ch_iss", summary.clone()).await;
                         issues_summaries = summary;
+
                     }
                     None => log::error!("processing issues failed"),
                 }
@@ -246,41 +245,26 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     };
 
     let mut discussion_data = String::new();
-    'discussion_block: {
-        match search_discussions(&github_token, &discussion_query).await {
-            Some((count, discussion_vec)) => {
-                let discussions_str = discussion_vec
-                    .iter()
-                    .map(|discussion| {
-                        discussion
-                            .source_url
-                            .rsplitn(2, '/')
-                            .nth(0)
-                            .unwrap_or("1234")
-                    })
-                    .collect::<Vec<&str>>()
-                    .join(", ");
-                let discussions_msg_str =
-                    format!("found {} discussions: {}", count, discussions_str);
-                report.push(format!("{discussions_msg_str}\n"));
-                send_response(
-                    200,
-                    vec![(String::from("content-type"), String::from("text/plain"))],
-                    discussions_msg_str.as_bytes().to_vec(),
-                );
-                if count == 0 {
-                    break 'discussion_block;
-                }
-
-                let (a, discussions_vec) = analyze_discussions(
-                    discussion_vec,
-                    Some(&user_name.clone().unwrap().to_string()),
-                )
-                .await;
-                discussion_data = a;
-            }
-            None => log::error!("failed to get discussions"),
+    match search_discussions_integrated(&github_token, &discussion_query, &user_name).await {
+        Some((summary, discussion_vec)) => {
+            let count = discussion_vec.len();
+            let discussions_str = discussion_vec
+                .iter()
+                .map(|discussion| {
+                    discussion
+                        .source_url
+                        .rsplitn(2, '/')
+                        .nth(0)
+                        .unwrap_or("1234")
+                })
+                .collect::<Vec<&str>>()
+                .join(", ");
+            let discussions_msg_str = format!("found {} discussions: {}", count, discussions_str);
+            report.push(format!("{discussions_msg_str}\n"));
+            send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
+            discussion_data = summary;
         }
+        None => log::error!("failed to get discussions"),
     }
 
     if commits_summaries.is_empty() && issues_summaries.is_empty() && discussion_data.is_empty() {

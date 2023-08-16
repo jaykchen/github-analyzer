@@ -1,5 +1,5 @@
 use crate::github_data_fetchers::*;
-use crate::octocrab_compat::Issue;
+use crate::octocrab_compat::{Comment, Issue};
 use crate::utils::*;
 use chrono::{DateTime, Utc};
 use log;
@@ -69,23 +69,17 @@ pub async fn process_issues(
     let mut git_memory_vec = vec![];
 
     for issue in &inp_vec {
-        match get_issue_texts(github_token, issue).await {
-            Some(text) => match analyze_issue(issue, target_person, &text).await {
-                None => {
-                    log::error!("Error analyzing issue: {:?}", issue.url.to_string());
-                    continue;
-                }
-                Some((summary, gm)) => {
-                    issues_summaries.push_str(&format!("{} {}\n", gm.date, summary));
-                    git_memory_vec.push(gm);
-                    if git_memory_vec.len() > 16 {
-                        break;
-                    }
-                }
-            },
+        match analyze_issue_integrated(github_token, issue, target_person).await {
             None => {
-                log::error!("Error getting issue texts: {:?}", issue.url.to_string());
+                log::error!("Error analyzing issue: {:?}", issue.url.to_string());
                 continue;
+            }
+            Some((summary, gm)) => {
+                issues_summaries.push_str(&format!("{} {}\n", gm.date, summary));
+                git_memory_vec.push(gm);
+                if git_memory_vec.len() > 16 {
+                    break;
+                }
             }
         }
     }
@@ -97,24 +91,81 @@ pub async fn process_issues(
     }
     Some((issues_summaries, count, git_memory_vec))
 }
-pub async fn analyze_issue(
+pub async fn analyze_issue_integrated(
+    github_token: &str,
     issue: &Issue,
     target_person: Option<&str>,
-    all_text: &str,
 ) -> Option<(String, GitMemory)> {
-    let issue_creator_name = issue.user.login.to_string();
-    let issue_number = issue.number;
+    let issue_creator_name = &issue.user.login;
     let issue_title = issue.title.to_string();
-
+    let issue_number = issue.number;
     let issue_date = issue.created_at.date_naive();
+
+    let issue_body = match &issue.body {
+        Some(body) => squeeze_fit_remove_quoted(body, "```", 500, 0.6),
+        None => "".to_string(),
+    };
     let issue_url = issue.url.to_string();
+
+    let labels = issue
+        .labels
+        .iter()
+        .map(|lab| lab.name.clone())
+        .collect::<Vec<String>>()
+        .join(", ");
+
+    let mut all_text_from_issue = format!(
+        "User '{}', opened an issue titled '{}', labeled '{}', with the following post: '{}'.",
+        issue_creator_name, issue_title, labels, issue_body
+    );
+
+    let mut current_page = 1;
+    loop {
+        let url_str = format!("{}/comments?&page={}", issue_url, current_page);
+
+        match github_http_fetch(&github_token, &url_str).await {
+            Some(res) => match serde_json::from_slice::<Vec<Comment>>(res.as_slice()) {
+                Err(_e) => {
+                    log::error!(
+                        "Error parsing Vec<Comment> at page {}: {:?}",
+                        current_page,
+                        _e
+                    );
+                    break;
+                }
+                Ok(comments_obj) => {
+                    if comments_obj.is_empty() {
+                        break;
+                    }
+                    for comment in &comments_obj {
+                        let comment_body = match &comment.body {
+                            Some(body) => squeeze_fit_remove_quoted(body, "```", 500, 0.6),
+                            None => "".to_string(),
+                        };
+                        let commenter = &comment.user.login;
+                        let commenter_input = format!("{} commented: {}", commenter, comment_body);
+                        if all_text_from_issue.len() > 45_000 {
+                            break;
+                        }
+                        all_text_from_issue.push_str(&commenter_input);
+                    }
+                }
+            },
+            None => {
+                break;
+            }
+        }
+
+        current_page += 1;
+    }
+
     let target_str = target_person.unwrap_or("key participants");
 
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to analyze the content of the issue posts. Extract key details including the main problem or question raised, the environment in which the issue occurred, any steps taken by the user and commenters to address the problem, relevant discussions, and any identified solutions, consesus reached, or pending tasks."
     );
     let usr_prompt_1 = &format!(
-        "Based on the GitHub issue posts: {all_text}, please list the following key details: The main problem or question raised in the issue. The environment or conditions in which the issue occurred (e.g., hardware, OS). Any steps or actions taken by the user or commenters to address the issue. Key discussions or points of view shared by participants in the issue thread. Any solutions identified, consensus reached, or pending tasks if the issue hasn't been resolved. The role and contribution of the user or commenters in the issue."
+        "Based on the GitHub issue posts: {all_text_from_issue}, please list the following key details: The main problem or question raised in the issue. The environment or conditions in which the issue occurred (e.g., hardware, OS). Any steps or actions taken by the user or commenters to address the issue. Key discussions or points of view shared by participants in the issue thread. Any solutions identified, consensus reached, or pending tasks if the issue hasn't been resolved. The role and contribution of the user or commenters in the issue."
     );
     let usr_prompt_2 = &format!(
         "Provide a brief summary highlighting the core problem and emphasize the overarching contribution made by '{target_str}' to the resolution of this issue, ensuring your response stays under 128 tokens."
@@ -247,15 +298,12 @@ pub async fn analyze_commit_integrated(
     }
 }
 
-pub async fn process_commits(
-    github_token: &str,
-    inp_vec: &mut Vec<GitMemory>,
-) -> Option<String> {
+pub async fn process_commits(github_token: &str, inp_vec: &mut Vec<GitMemory>) -> Option<String> {
     let mut commits_summaries = String::new();
-    
-    let max_entries = 20;  // Maximum entries to process
-    let mut processed_count = 0;  // Number of processed entries
-    
+
+    let max_entries = 20; // Maximum entries to process
+    let mut processed_count = 0; // Number of processed entries
+
     for commit_obj in inp_vec.iter_mut() {
         if processed_count >= max_entries {
             break;
@@ -273,7 +321,8 @@ pub async fn process_commits(
                 commit_obj.payload = summary;
 
                 if commits_summaries.len() <= 45_000 {
-                    commits_summaries.push_str(&format!("{} {}\n", commit_obj.date, commit_obj.payload));
+                    commits_summaries
+                        .push_str(&format!("{} {}\n", commit_obj.date, commit_obj.payload));
                 }
 
                 processed_count += 1;
@@ -293,9 +342,8 @@ pub async fn process_commits(
         return None;
     }
 
-   Some (commits_summaries)
+    Some(commits_summaries)
 }
-
 
 // pub async fn process_commits(
 //     github_token: &str,
@@ -345,7 +393,7 @@ pub async fn process_commits(
 //     Some((commits_summaries, count, git_memory_vec))
 // }
 
-pub async fn analyze_discussions(
+/* pub async fn analyze_discussions(
     mut discussions: Vec<GitMemory>,
     target_person: Option<&str>,
 ) -> (String, Vec<GitMemory>) {
@@ -388,7 +436,7 @@ pub async fn analyze_discussions(
     }
 
     (text_out, discussions)
-}
+} */
 
 pub async fn correlate_commits_issues(
     _commits_summary: &str,

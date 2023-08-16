@@ -1182,10 +1182,11 @@ pub async fn search_repository(github_token: &str, search_query: &str) -> Option
     Some(out)
 }
 
-pub async fn search_discussions(
+pub async fn search_discussions_integrated(
     github_token: &str,
     search_query: &str,
-) -> Option<(usize, Vec<GitMemory>)> {
+    target_person: &Option<String>,
+) -> Option<(String, Vec<GitMemory>)> {
     #[derive(Debug, Deserialize)]
     struct DiscussionRoot {
         data: Option<Data>,
@@ -1276,6 +1277,8 @@ pub async fn search_discussions(
         search_query = search_query
     );
     let mut git_mem_vec = Vec::with_capacity(100);
+    let mut text_out = String::from("DISCUSSIONS \n");
+
     match github_http_post(&github_token, base_url, &query).await {
         None => {
             log::error!(
@@ -1309,17 +1312,15 @@ pub async fn search_discussions(
                                 Some(c) if c > 0 => format!("Upvotes: {}", c),
                                 _ => "".to_string(),
                             };
+                            let body_text = match discussion.body.as_ref() {
+                                Some(text) => squeeze_fit_remove_quoted(&text, "```", 500, 0.6),
+                                None => "".to_string(),
+                            };
 
-                            let mut payload = String::new();
-                            payload.push_str(&format!(
+                            let mut disuccsion_texts = format!(
                                 "Title: '{}' Url: '{}' Body: '{}' Created At: {} {} Author: {}\n",
-                                title,
-                                url,
-                                discussion.body.as_ref().unwrap_or(&empty_str),
-                                date,
-                                upvotes_str,
-                                author_login
-                            ));
+                                title, url, body_text, date, upvotes_str, author_login
+                            );
 
                             if let Some(comments) = &discussion.comments {
                                 if let Some(ref edges) = comments.edges {
@@ -1327,7 +1328,7 @@ pub async fn search_discussions(
                                         edges.iter().filter_map(|e| e.as_ref())
                                     {
                                         if let Some(comment) = &comment_edge_option.node {
-                                            let one_comment_text = format!(
+                                            let comment_texts = format!(
                                                 "{} comments: '{}'\n",
                                                 comment
                                                     .author
@@ -1336,20 +1337,59 @@ pub async fn search_discussions(
                                                     .unwrap_or(&empty_str),
                                                 comment.body.as_ref().unwrap_or(&empty_str)
                                             );
-                                            payload.push_str(&one_comment_text);
+
+                                            let stripped_comment_text = squeeze_fit_remove_quoted(
+                                                &comment_texts,
+                                                "```",
+                                                500,
+                                                0.6,
+                                            );
+                                            disuccsion_texts.push_str(&stripped_comment_text);
                                         }
                                     }
                                 }
                             }
+                            let target_str = match &target_person {
+                                Some(person) => format!("{}'s", person),
+                                None => "key participants'".to_string(),
+                            };
+                            let sys_prompt_1 =
+                                "Given the information on a GitHub discussion, your task is to analyze the content of the discussion posts. Extract key details including the main topic or question raised, any steps taken by the original author and commenters to address the problem, relevant discussions, and any identified solutions, consensus reached, or pending tasks.";
 
-                            git_mem_vec.push(GitMemory {
-                                memory_type: MemoryType::Discussion,
-                                name: author_login,
-                                tag_line: title,
-                                source_url: url,
-                                payload: payload,
-                                date: date,
-                            });
+                            let usr_prompt_1 = &format!(
+                                    "Based on the GitHub discussion post: {}, please list the following key details: The main topic or question raised in the discussion. Any steps or actions taken by the original author or commenters to address the discussion. Key discussions or points of view shared by participants in the discussion thread. Any solutions identified, consensus reached, or pending tasks if the discussion hasn't been resolved. The role and contribution of the user or commenters in the discussion.",
+                                    disuccsion_texts
+                                );
+
+                            let usr_prompt_2 = &format!(
+                                    "Provide a brief summary highlighting the core topic and emphasize the overarching contribution made by '{target_str}' to the resolution of this discussion, ensuring your response stays under 128 tokens."
+                                );
+
+                            match chain_of_chat(
+                                sys_prompt_1,
+                                usr_prompt_1,
+                                "discussion99",
+                                256,
+                                usr_prompt_2,
+                                128,
+                                &format!("Error generating discussion summary #{}", url),
+                            )
+                            .await
+                            {
+                                Some(summary) => {
+                                    text_out.push_str(&(format!("{} {}", url, summary)));
+                                    git_mem_vec.push(GitMemory {
+                                        memory_type: MemoryType::Discussion,
+                                        name: author_login,
+                                        tag_line: title,
+                                        source_url: url,
+                                        payload: summary,
+                                        date: date,
+                                    });
+                                }
+
+                                None => log::error!("Error generating discussion summary #{}", url),
+                            }
                         }
                     }
                 }
@@ -1360,8 +1400,7 @@ pub async fn search_discussions(
     if git_mem_vec.is_empty() {
         None
     } else {
-        let count = git_mem_vec.len();
-        Some((count, git_mem_vec))
+        Some((text_out, git_mem_vec))
     }
 }
 
