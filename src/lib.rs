@@ -25,7 +25,7 @@ pub async fn run() {
 async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, _body: Vec<u8>) {
     let github_token = env::var("github_token").expect("github_token was not present in env");
 
-    let (owner, repo) = match (_qry.get("owner"), _qry.get("repo")) {
+    let (owner, repo) = match (_qry.get("owner").unwrap_or(&Value::Null).as_str(), _qry.get("repo").unwrap_or(&Value::Null).as_str()) {
         (Some(o), Some(r)) => (o.to_string(), r.to_string()),
         (_, _) => {
             send_response(
@@ -39,10 +39,10 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         }
     };
 
-    let user_name = _qry.get("username").map(|n| n.to_string());
+    let user_name = _qry.get("username").unwrap_or(&Value::Null).as_str().map(|n| n.to_string());
 
     log::error!("owner: {:?}, repo: {:?}, username: {:?}", owner, repo, user_name);
-    
+
     let start_msg_str = match &user_name {
         Some(name) => format!(
             "Processing data for owner: {}, repo: {}, and user: {}",
