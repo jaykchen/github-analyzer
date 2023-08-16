@@ -153,7 +153,7 @@ pub async fn analyze_issue(
     }
 }
 
-pub async fn analyze_commit(
+pub async fn analyze_commit_integrated(
     github_token: &str,
     user_name: &str,
     tag_line: &str,
@@ -178,22 +178,22 @@ pub async fn analyze_commit(
 
             let text = String::from_utf8_lossy(writer.as_slice());
 
-            let mut escaped_texts = String::with_capacity(text.len());
+            let mut stripped_texts = String::with_capacity(text.len());
             let mut inside_diff_block = false;
 
             let max_length = 18_000;
 
             for line in text.lines() {
-                if escaped_texts.len() + line.len() > max_length {
-                    let remaining = max_length - escaped_texts.len();
-                    escaped_texts.push_str(&line.chars().take(remaining).collect::<String>());
+                if stripped_texts.len() + line.len() > max_length {
+                    let remaining = max_length - stripped_texts.len();
+                    stripped_texts.push_str(&line.chars().take(remaining).collect::<String>());
                     break;
                 }
 
                 if line.starts_with("diff --git") {
                     inside_diff_block = true;
-                    escaped_texts.push_str(line);
-                    escaped_texts.push('\n');
+                    stripped_texts.push_str(line);
+                    stripped_texts.push('\n');
                     continue;
                 }
 
@@ -206,8 +206,8 @@ pub async fn analyze_commit(
                     }
                 }
 
-                escaped_texts.push_str(line);
-                escaped_texts.push('\n');
+                stripped_texts.push_str(line);
+                stripped_texts.push('\n');
 
                 if line.is_empty() {
                     inside_diff_block = false;
@@ -218,7 +218,7 @@ pub async fn analyze_commit(
             );
 
             let usr_prompt_1 = &format!(
-                "Based on the provided commit patch: {escaped_texts}, and description: {tag_line}, extract and present the following key elements: a high-level summary of the changes made, and the types of files affected. Prioritize data on changes to code files first, then scripts, and lastly documentation. Pay attention to the file types and ensure the distinction between documentation changes and core code changes, even when the documentation contains highly technical language. Please compile your findings into a list, with each key element represented as a separate item."
+                "Based on the provided commit patch: {stripped_texts}, and description: {tag_line}, extract and present the following key elements: a high-level summary of the changes made, and the types of files affected. Prioritize data on changes to code files first, then scripts, and lastly documentation. Pay attention to the file types and ensure the distinction between documentation changes and core code changes, even when the documentation contains highly technical language. Please compile your findings into a list, with each key element represented as a separate item."
             );
 
             let usr_prompt_2 = &format!(
@@ -249,13 +249,19 @@ pub async fn analyze_commit(
 
 pub async fn process_commits(
     github_token: &str,
-    inp_vec: Vec<GitMemory>,
-) -> Option<(String, usize, Vec<GitMemory>)> {
+    inp_vec: &mut Vec<GitMemory>,
+) -> Option<String> {
     let mut commits_summaries = String::new();
-    let mut git_memory_vec = vec![];
-    let mut inp_vec = inp_vec;
-    for commit_obj in inp_vec.drain(..) {
-        match analyze_commit(
+    
+    let max_entries = 20;  // Maximum entries to process
+    let mut processed_count = 0;  // Number of processed entries
+    
+    for commit_obj in inp_vec.iter_mut() {
+        if processed_count >= max_entries {
+            break;
+        }
+
+        match analyze_commit_integrated(
             github_token,
             &commit_obj.name,
             &commit_obj.tag_line,
@@ -264,18 +270,13 @@ pub async fn process_commits(
         .await
         {
             Some(summary) => {
-                let mut commit_obj = commit_obj; // to make it mutable
                 commit_obj.payload = summary;
 
                 if commits_summaries.len() <= 45_000 {
-                    commits_summaries
-                        .push_str(&format!("{} {}\n", commit_obj.date, commit_obj.payload));
+                    commits_summaries.push_str(&format!("{} {}\n", commit_obj.date, commit_obj.payload));
                 }
 
-                git_memory_vec.push(commit_obj);
-                if git_memory_vec.len() > 20 {
-                    break;
-                }
+                processed_count += 1;
             }
             None => {
                 log::error!(
@@ -287,13 +288,62 @@ pub async fn process_commits(
         }
     }
 
-    let count = git_memory_vec.len();
-    if count == 0 {
+    if processed_count == 0 {
         log::error!("No commits processed");
         return None;
     }
-    Some((commits_summaries, count, git_memory_vec))
+
+   Some (commits_summaries)
 }
+
+
+// pub async fn process_commits(
+//     github_token: &str,
+//     inp_vec: Vec<GitMemory>,
+// ) -> Option<(String, usize, Vec<GitMemory>)> {
+//     let mut commits_summaries = String::new();
+//     let mut git_memory_vec = vec![];
+//     let mut inp_vec = inp_vec;
+//     for commit_obj in inp_vec.drain(..) {
+//         match analyze_commit(
+//             github_token,
+//             &commit_obj.name,
+//             &commit_obj.tag_line,
+//             &commit_obj.source_url,
+//         )
+//         .await
+//         {
+//             Some(summary) => {
+//                 let mut commit_obj = commit_obj; // to make it mutable
+//                 commit_obj.payload = summary;
+
+//                 if commits_summaries.len() <= 45_000 {
+//                     commits_summaries
+//                         .push_str(&format!("{} {}\n", commit_obj.date, commit_obj.payload));
+//                 }
+
+//                 git_memory_vec.push(commit_obj);
+//                 if git_memory_vec.len() > 20 {
+//                     break;
+//                 }
+//             }
+//             None => {
+//                 log::error!(
+//                     "Error analyzing commit {:?} for user {}",
+//                     commit_obj.source_url,
+//                     commit_obj.name
+//                 );
+//             }
+//         }
+//     }
+
+//     let count = git_memory_vec.len();
+//     if count == 0 {
+//         log::error!("No commits processed");
+//         return None;
+//     }
+//     Some((commits_summaries, count, git_memory_vec))
+// }
 
 pub async fn analyze_discussions(
     mut discussions: Vec<GitMemory>,

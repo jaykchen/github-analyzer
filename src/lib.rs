@@ -8,10 +8,10 @@ use data_analyzers::*;
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::*;
-use webhook_flows::{request_received, send_response};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::{collections::HashMap, thread::sleep};
 use std::env;
+use webhook_flows::{request_received, send_response};
 
 #[no_mangle]
 #[tokio::main(flavor = "current_thread")]
@@ -25,7 +25,10 @@ pub async fn run() {
 async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, _body: Vec<u8>) {
     let github_token = env::var("github_token").expect("github_token was not present in env");
 
-    let (owner, repo) = match (_qry.get("owner").unwrap_or(&Value::Null).as_str(), _qry.get("repo").unwrap_or(&Value::Null).as_str()) {
+    let (owner, repo) = match (
+        _qry.get("owner").unwrap_or(&Value::Null).as_str(),
+        _qry.get("repo").unwrap_or(&Value::Null).as_str(),
+    ) {
         (Some(o), Some(r)) => (o.to_string(), r.to_string()),
         (_, _) => {
             send_response(
@@ -39,9 +42,18 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         }
     };
 
-    let user_name = _qry.get("username").unwrap_or(&Value::Null).as_str().map(|n| n.to_string());
+    let user_name = _qry
+        .get("username")
+        .unwrap_or(&Value::Null)
+        .as_str()
+        .map(|n| n.to_string());
 
-    log::error!("owner: {:?}, repo: {:?}, username: {:?}", owner, repo, user_name);
+    log::error!(
+        "owner: {:?}, repo: {:?}, username: {:?}",
+        owner,
+        repo,
+        user_name
+    );
 
     let start_msg_str = match &user_name {
         Some(name) => format!(
@@ -130,22 +142,15 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         )
         .await
         {
-            Some((count, commits_vec)) => {
+            Some((count, mut commits_vec)) => {
                 let commits_str = commits_vec
                     .iter()
-                    .map(|com| {
-                        com.source_url
-                            .rsplitn(2, '/')
-                            .nth(0)
-                            .unwrap_or("1234567")
-                            .chars()
-                            .take(7)
-                            .collect::<String>()
-                    })
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                let commits_msg_str = format!("found {count} commits: {commits_str}");
-                report.push_str(&format!("{commits_msg_str}\n"));
+                    .map(|com| com.source_url.as_str())
+                    .collect::<Vec<&str>>()
+                    .join("\n");
+                let commits_head_str = format!("found {count} commits");
+                let commits_msg_str = format!("{commits_head_str}:\n{commits_str}");
+                report.push_str(&format!("{commits_head_str}\n"));
                 send_response(
                     200,
                     vec![(String::from("content-type"), String::from("text/plain"))],
@@ -154,11 +159,22 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 if count == 0 {
                     break 'commits_block;
                 }
-                match process_commits(&github_token, commits_vec).await {
-                    Some((a, _, commit_vec)) => {
-                        commits_summaries = a;
+                match process_commits(&github_token, &mut commits_vec).await {
+                    Some(summary) => {
+                        commits_summaries = summary;
                     }
                     None => log::error!("processing commits failed"),
+                }
+
+                if !commits_vec.is_empty() {
+                    for com in commits_vec {
+                        sleep(std::time::Duration::from_secs(2));
+                        send_response(
+                            200,
+                            vec![(String::from("content-type"), String::from("text/plain"))],
+                            com.payload.as_bytes().to_vec(),
+                        );
+                    }
                 }
             }
             None => log::error!("failed to get commits"),
@@ -263,8 +279,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             Some(target_person) => {
                 report = format!(
                     "No useful data found for {}, you may try `/search` to find out more about {}",
-                    target_person,
-                    target_person
+                    target_person, target_person
                 );
             }
 
