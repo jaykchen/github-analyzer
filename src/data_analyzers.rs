@@ -3,9 +3,12 @@ use crate::octocrab_compat::{Comment, Issue};
 use crate::utils::*;
 use chrono::{DateTime, Utc};
 use log;
-use openai_flows::{self, OpenAIFlows, chat::{self, ChatModel, ChatOptions}};
+use openai_flows::{
+    self,
+    chat::{self, ChatModel, ChatOptions},
+    OpenAIFlows,
+};
 use serde::Deserialize;
-
 
 pub async fn is_valid_owner_repo(github_token: &str, owner: &str, repo: &str) -> Option<GitMemory> {
     #[derive(Deserialize)]
@@ -164,7 +167,7 @@ pub async fn analyze_issue_integrated(
     let target_str = target_person.unwrap_or("key participants");
 
     let sys_prompt_1 = &format!(
-        "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to analyze the content of the issue posts. Extract key details including the main problem or question raised, the environment in which the issue occurred, any steps taken by the user and commenters to address the problem, relevant discussions, and any identified solutions, consesus reached, or pending tasks."
+        "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
 
     let co = ChatOptions {
@@ -176,10 +179,13 @@ pub async fn analyze_issue_integrated(
         ..Default::default()
     };
     let usr_prompt_1 = &format!(
-        "Based on the GitHub issue posts: {all_text_from_issue}, please list the following key details: The main problem or question raised in the issue. The environment or conditions in which the issue occurred (e.g., hardware, OS). Any steps or actions taken by the user or commenters to address the issue. Key discussions or points of view shared by participants in the issue thread. Any solutions identified, consensus reached, or pending tasks if the issue hasn't been resolved. The role and contribution of the user or commenters in the issue. Provide a brief summary highlighting the core problem and emphasize the overarching contribution made by '{target_str}' to the resolution of this issue, ensuring your response stays under 128 tokens."
+        "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 128 tokens."
     );
 
-    match openai.chat_completion(&format!("issue_{issue_number}"), usr_prompt_1, &co).await {
+    match openai
+        .chat_completion(&format!("issue_{issue_number}"), usr_prompt_1, &co)
+        .await
+    {
         Ok(r) => {
             let mut out = format!("{issue_url} ");
             out.push_str(&r.choice);
