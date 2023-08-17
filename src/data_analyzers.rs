@@ -170,13 +170,23 @@ pub async fn analyze_issue_integrated(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
 
-    let co = ChatOptions {
-        model: chat::ChatModel::GPT35Turbo16K,
-        system_prompt: Some(sys_prompt_1),
-        restart: true,
-        temperature: Some(0.7),
-        max_tokens: Some(128),
-        ..Default::default()
+    let co = match all_text_from_issue.len() > 12000 {
+        true => ChatOptions {
+            model: chat::ChatModel::GPT35Turbo16K,
+            system_prompt: Some(sys_prompt_1),
+            restart: true,
+            temperature: Some(0.7),
+            max_tokens: Some(192),
+            ..Default::default()
+        },
+        false => ChatOptions {
+            model: chat::ChatModel::GPT35Turbo,
+            system_prompt: Some(sys_prompt_1),
+            restart: true,
+            temperature: Some(0.7),
+            max_tokens: Some(128),
+            ..Default::default()
+        },
     };
     let usr_prompt_1 = &format!(
         "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 128 tokens."
