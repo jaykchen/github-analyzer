@@ -39,53 +39,50 @@ pub async fn is_valid_owner_repo_integrated(
                     .unwrap_or(&String::from(""))
                     .to_string();
 
-                match &profile.readme {
-                    Some(_) => {
-                        match get_readme(github_token, owner, repo).await {
-                            Some(content) => {
-                                let stripped_texts =
-                                    squeeze_fit_remove_quoted(&content, "```", 9000, 0.6);
+                if let Some(_) = &profile.readme {
+                    match get_readme(github_token, owner, repo).await {
+                        Some(content) => {
+                            let stripped_texts =
+                                squeeze_fit_remove_quoted(&content, "```", 9000, 0.6);
 
-                                let sys_prompt_1 = &format!(
-        "You are given a GitHub profile of {owner}/{repo} and the README of their project. Your primary objective is to understand the user's involvement in the community, their expertise, and the project's core features and goals. Analyze the content with an emphasis on the user's contributions, the project's objectives, and its significance in the community."
-    );
+                            let sys_prompt_1 = &format!(
+    "You are given a GitHub profile of {owner}/{repo} and the README of their project. Your primary objective is to understand the user's involvement in the community, their expertise, and the project's core features and goals. Analyze the content with an emphasis on the user's contributions, the project's objectives, and its significance in the community."
+);
 
-                                let co = match stripped_texts.len() > 12000 {
-                                    true => ChatOptions {
-                                        model: chat::ChatModel::GPT35Turbo16K,
-                                        system_prompt: Some(sys_prompt_1),
-                                        restart: true,
-                                        temperature: Some(0.7),
-                                        max_tokens: Some(192),
-                                        ..Default::default()
-                                    },
-                                    false => ChatOptions {
-                                        model: chat::ChatModel::GPT35Turbo,
-                                        system_prompt: Some(sys_prompt_1),
-                                        restart: true,
-                                        temperature: Some(0.7),
-                                        max_tokens: Some(128),
-                                        ..Default::default()
-                                    },
-                                };
-                                let usr_prompt_1 = &format!(
-        "Analyze the profile information of {owner}/{repo} and the README: {stripped_texts}. Provide a concise summary of the user's contributions to the GitHub community, their primary areas of expertise, and a brief overview of the project, highlighting its main features, goals, and importance. Keep your insights succinct and under 110 tokens."
-    );
+                            let co = match stripped_texts.len() > 12000 {
+                                true => ChatOptions {
+                                    model: chat::ChatModel::GPT35Turbo16K,
+                                    system_prompt: Some(sys_prompt_1),
+                                    restart: true,
+                                    temperature: Some(0.7),
+                                    max_tokens: Some(384),
+                                    ..Default::default()
+                                },
+                                false => ChatOptions {
+                                    model: chat::ChatModel::GPT35Turbo,
+                                    system_prompt: Some(sys_prompt_1),
+                                    restart: true,
+                                    temperature: Some(0.7),
+                                    max_tokens: Some(256),
+                                    ..Default::default()
+                                },
+                            };
+                            let usr_prompt_1 = &format!(
+    "Analyze the profile information of {owner}/{repo} and the README: {stripped_texts}. Provide a concise summary of the user's contributions to the GitHub community, their primary areas of expertise, and a brief overview of the project, highlighting its main features, goals, and importance. Keep your insights succinct and under 110 tokens."
+);
 
-                                match openai
-                                    .chat_completion(&format!("profile-99"), usr_prompt_1, &co)
-                                    .await
-                                {
-                                    Ok(r) => payload = r.choice,
-                                    Err(_e) => {
-                                        log::error!("Error summarizing meta data: {}", _e);
-                                    }
+                            match openai
+                                .chat_completion(&format!("profile-99"), usr_prompt_1, &co)
+                                .await
+                            {
+                                Ok(r) => payload = r.choice,
+                                Err(_e) => {
+                                    log::error!("Error summarizing meta data: {}", _e);
                                 }
                             }
-                            None => {}
-                        };
-                    }
-                    None => {}
+                        }
+                        None => {}
+                    };
                 };
                 if payload.is_empty() {
                     payload = description.clone();

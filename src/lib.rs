@@ -85,29 +85,29 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     match &user_name {
         Some(user_name) => {
             if !is_code_contributor(&github_token, &owner, &repo, &user_name.clone()).await {
-                send_response(
-                    200,
-                    vec![(String::from("content-type"), String::from("text/plain"))],
-                    format!(
-                        "{} hasn't contributed code to {}/{}. Bot will try to find out {}'s other contributions.",
-                        user_name, owner, repo, user_name
-                    ).as_bytes()
-                    .to_vec(),
+                // send_response(
+                //     200,
+                //     vec![(String::from("content-type"), String::from("text/plain"))],
+                //     format!(
+                //         "{} hasn't contributed code to {}/{}. Bot will try to find out {}'s other contributions.",
+                //         user_name, owner, repo, user_name
+                //     ).as_bytes()
+                //     .to_vec(),
 
-                );
+                // );
             }
         }
         None => {
-            send_response(
-                200,
-                vec![(String::from("content-type"), String::from("text/plain"))],
-                format!(
-                    "You didn't input a user's name. Bot will then create a report on the weekly progress of {}/{}.",
-                    owner, repo
-                ).as_bytes()
-                .to_vec(),
+            // send_response(
+            //     200,
+            //     vec![(String::from("content-type"), String::from("text/plain"))],
+            //     format!(
+            //         "You didn't input a user's name. Bot will then create a report on the weekly progress of {}/{}.",
+            //         owner, repo
+            //     ).as_bytes()
+            //     .to_vec(),
 
-            );
+            // );
         }
     }
 

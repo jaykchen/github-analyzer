@@ -328,8 +328,9 @@ pub async fn get_readme(github_token: &str, owner: &str, repo: &str) -> Option<S
                     match base64::decode(&cleaned_content) {
                         Ok(decoded_content) => match String::from_utf8(decoded_content) {
                             Ok(out) => {
-                                let truncated = squeeze_fit_remove_quoted(&out, "```", 2000, 0.6);
-                                return Some(format!("Readme: {}", truncated));
+                                slack_flows::send_message_to_channel("ik8", "ch_pro", out.clone()).await;
+
+                                return Some(format!("Readme: {}", out));
                             }
                             Err(e) => {
                                 log::error!("Failed to convert cleaned readme to String: {:?}", e);
