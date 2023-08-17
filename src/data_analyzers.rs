@@ -69,6 +69,7 @@ pub async fn is_valid_owner_repo_integrated(
                                     if r.choice.is_empty() {
                                         log::error!("OpenAI returned an empty summary.");
                                     } else {
+                                        slack_flows::send_message_to_channel("ik8", "general", r.choice.clone()).await;
                                         payload = r.choice;
                                     }
                                 }
