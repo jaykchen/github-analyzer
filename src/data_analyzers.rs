@@ -69,7 +69,7 @@ pub async fn is_valid_owner_repo_integrated(
                                     if r.choice.is_empty() {
                                         log::error!("OpenAI returned an empty summary.");
                                     } else {
-                                        payload  =r.choice;
+                                        payload = r.choice;
                                     }
                                 }
                                 Err(_e) => {
@@ -80,7 +80,7 @@ pub async fn is_valid_owner_repo_integrated(
                         None => {}
                     };
                 };
-                Some(payload)
+                return Some(payload);
                 // if payload.is_empty() {
                 //     payload = description.clone();
                 // }

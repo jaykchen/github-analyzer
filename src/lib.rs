@@ -77,10 +77,9 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         }
         Some(gm) => {
             _profile_data = format!("About {}/{}: {}", owner, repo, gm.clone());
-            send_message_to_channel("ik8", "ch_pro", gm).await;
-
         }
     }
+    send_message_to_channel("ik8", "ch_pro", _profile_data.clone()).await;
 
     match &user_name {
         Some(user_name) => {
@@ -267,21 +266,4 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         vec![(String::from("content-type"), String::from("text/plain"))],
         report.join("\n").as_bytes().to_vec(),
     );
-}
-
-pub async fn send_response_wrapped(
-    mut que: std::collections::VecDeque<String>,
-    report: &mut Vec<String>,
-) {
-    while let Some(msg) = que.pop_back() {
-        report.push(msg.clone());
-
-        sleep(std::time::Duration::from_secs(2));
-
-        send_response(
-            200,
-            vec![(String::from("content-type"), String::from("text/plain"))],
-            msg.as_bytes().to_vec(),
-        );
-    }
 }
