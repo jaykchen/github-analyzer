@@ -14,7 +14,7 @@ pub async fn is_valid_owner_repo_integrated(
     github_token: &str,
     owner: &str,
     repo: &str,
-) -> Option<String> {
+) -> Option<GitMemory> {
     #[derive(Deserialize)]
     struct CommunityProfile {
         health_percentage: u16,
@@ -33,67 +33,35 @@ pub async fn is_valid_owner_repo_integrated(
     match github_http_fetch(&github_token, &community_profile_url).await {
         Some(res) => match serde_json::from_slice::<CommunityProfile>(&res) {
             Ok(profile) => {
-                // let description = profile
-                //     .description
-                //     .as_ref()
-                //     .unwrap_or(&String::from(""))
-                //     .to_string();
+                let description = profile
+                    .description
+                    .as_ref()
+                    .unwrap_or(&String::from(""))
+                    .to_string();
 
                 if let Some(_) = &profile.readme {
                     match get_readme(github_token, owner, repo).await {
                         Some(content) => {
-                            // let stripped_texts =
-                            //     squeeze_fit_remove_quoted(&content, "```", 9000, 0.6);
-                            let content = content.chars().take(18000).collect::<String>();
-                            let sys_prompt_1 = &format!(
-    "You are given a GitHub profile of {owner}/{repo} and the README of their project. Your primary objective is to understand the user's involvement in the community, their expertise, and the project's core features and goals. Analyze the content with an emphasis on the user's contributions, the project's objectives, and its significance in the community."
-);
-
-                            let co = ChatOptions {
-                                model: chat::ChatModel::GPT35Turbo16K,
-                                system_prompt: Some(sys_prompt_1),
-                                restart: true,
-                                temperature: Some(0.7),
-                                max_tokens: Some(256),
-                                ..Default::default()
-                            };
-                            let usr_prompt_1 = &format!(
-    "Analyze the profile information of {owner}/{repo} and the README: {content}. Provide a concise summary of the user's contributions to the GitHub community, their primary areas of expertise, and a brief overview of the project, highlighting its main features, goals, and importance. Keep your insights succinct and under 110 tokens."
-);
-
-                            match openai
-                                .chat_completion(&format!("profile-99"), usr_prompt_1, &co)
-                                .await
-                            {
-                                Ok(r) => {
-                                    if r.choice.is_empty() {
-                                        log::error!("OpenAI returned an empty summary.");
-                                    } else {
-                                        payload = r.choice;
-                                    }
-                                }
-                                Err(_e) => {
-                                    log::error!("Error summarizing meta data: {}", _e);
-                                }
-                            }
+                            let content = content.chars().take(20000).collect::<String>();
+                            let summary = analyze_readme(&content).await.unwrap_or("".to_string());
+                            payload = summary;
                         }
                         None => {}
                     };
                 };
-                return Some(payload);
-                // if payload.is_empty() {
-                //     payload = description.clone();
-                // }
-                // return Some(GitMemory {
-                //     memory_type: MemoryType::Meta,
-                //     name: format!("{}/{}", owner, repo),
-                //     tag_line: description,
-                //     source_url: community_profile_url,
-                //     payload: payload,
-                //     date: profile
-                //         .updated_at
-                //         .map_or(Utc::now().date_naive(), |dt| dt.date_naive()),
-                // });
+                if payload.is_empty() {
+                    payload = description.clone();
+                }
+                return Some(GitMemory {
+                    memory_type: MemoryType::Meta,
+                    name: format!("{}/{}", owner, repo),
+                    tag_line: description,
+                    source_url: community_profile_url,
+                    payload: payload,
+                    date: profile
+                        .updated_at
+                        .map_or(Utc::now().date_naive(), |dt| dt.date_naive()),
+                });
             }
             Err(e) => {
                 log::error!("Error parsing Community Profile: {:?}", e);
@@ -141,6 +109,37 @@ pub async fn process_issues(
     }
     Some((issues_summaries, count, git_memory_vec))
 }
+pub async fn analyze_readme(content: &str) -> Option<String> {
+    let openai = OpenAIFlows::new();
+
+    let sys_prompt_1 = &format!(
+        "Your task is to objectively analyze a GitHub profile and the README of their project. Focus on extracting factual information about the features of the project, and its stated objectives. Avoid making judgments or inferring subjective value."
+    );
+
+    let co = ChatOptions {
+        model: chat::ChatModel::GPT35Turbo16K,
+        system_prompt: Some(sys_prompt_1),
+        restart: true,
+        temperature: Some(0.7),
+        max_tokens: Some(256),
+        ..Default::default()
+    };
+    let usr_prompt_1 = &format!(
+        "Based on the profile and README provided: {content}, extract a concise summary detailing this project's factual significance in its domain, their areas of expertise, and the main features and goals of the project. Ensure the insights are objective and under 110 tokens."
+    );
+
+    match openai
+        .chat_completion(&format!("profile-99"), usr_prompt_1, &co)
+        .await
+    {
+        Ok(r) => Some(r.choice),
+        Err(e) => {
+            log::error!("Error summarizing meta data: {}", e);
+            None
+        }
+    }
+}
+
 pub async fn analyze_issue_integrated(
     github_token: &str,
     issue: &Issue,

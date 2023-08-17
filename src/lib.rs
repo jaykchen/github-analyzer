@@ -8,11 +8,6 @@ use data_analyzers::*;
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::*;
-use openai_flows::{
-    self,
-    chat::{self, ChatOptions},
-    OpenAIFlows,
-};
 use serde_json::Value;
 use slack_flows::send_message_to_channel;
 use std::env;
@@ -70,49 +65,26 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let mut _profile_data = String::new();
 
     let content = get_readme(&github_token, &owner, &repo).await.unwrap();
-    send_message_to_channel("ik8", "ch_pro", content.clone()).await;
+    let readme_summary = analyze_readme(&content).await.unwrap();
+    send_message_to_channel("ik8", "ch_err", readme_summary.clone()).await;
 
-    let openai = OpenAIFlows::new();
+    _profile_data = readme_summary;
 
-    let sys_prompt_1 = &format!(
-    "You are given a GitHub profile of {owner}/{repo} and the README of their project. Your primary objective is to understand the user's involvement in the community, their expertise, and the project's core features and goals. Analyze the content with an emphasis on the user's contributions, the project's objectives, and its significance in the community."
-);
-
-    let co = ChatOptions {
-        model: chat::ChatModel::GPT35Turbo16K,
-        system_prompt: Some(sys_prompt_1),
-        restart: true,
-        temperature: Some(0.7),
-        max_tokens: Some(256),
-        ..Default::default()
-    };
-    let usr_prompt_1 = &format!(
-    "Analyze the profile information of {owner}/{repo} and the README: {content}. Provide a concise summary of the user's contributions to the GitHub community, their primary areas of expertise, and a brief overview of the project, highlighting its main features, goals, and importance. Keep your insights succinct and under 110 tokens."
-);
-
-    let readme_summary = match openai
-        .chat_completion(&format!("profile-99"), usr_prompt_1, &co)
-        .await
-    {
-        Ok(r) => r.choice,
-        Err(e) => String::from(""),
-    };
-    _profile_data = readme_summary.clone();
-    // match is_valid_owner_repo_integrated(&github_token, &owner, &repo).await {
-    //     None => {
-    //         send_response(
-    //             400,
-    //             vec![(String::from("content-type"), String::from("text/plain"))],
-    //             "You've entered invalid owner/repo, or the target is private. Please try again."
-    //                 .as_bytes()
-    //                 .to_vec(),
-    //         );
-    //         return;
-    //     }
-    //     Some(gm) => {
-    //         _profile_data = format!("About {}/{}: {}", owner, repo, gm.clone());
-    //     }
-    // }
+    match is_valid_owner_repo_integrated(&github_token, &owner, &repo).await {
+        None => {
+            send_response(
+                400,
+                vec![(String::from("content-type"), String::from("text/plain"))],
+                "You've entered invalid owner/repo, or the target is private. Please try again."
+                    .as_bytes()
+                    .to_vec(),
+            );
+            return;
+        }
+        Some(gm) => {
+            _profile_data = format!("About {}/{}: {}", owner, repo, gm.payload);
+        }
+    }
     send_message_to_channel("ik8", "ch_pro", _profile_data.clone()).await;
 
     match &user_name {
