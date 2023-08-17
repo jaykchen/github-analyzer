@@ -78,6 +78,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         Some(gm) => {
             _profile_data = format!("About {}/{}: {}", owner, repo, gm.payload.clone());
             send_message_to_channel("ik8", "ch_pro", gm.payload).await;
+            send_message_to_channel("ik8", "ch_pro", gm.tag_line).await;
 
         }
     }
