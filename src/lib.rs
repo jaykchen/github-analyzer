@@ -67,7 +67,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
     let mut message_que = std::collections::VecDeque::<String>::new();
 
-    let n_days = 7u16;
+    let n_days = 30u16;
     let mut report = Vec::<String>::new();
 
     let mut _profile_data = String::new();
