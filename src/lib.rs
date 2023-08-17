@@ -131,7 +131,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     // );
 
     let mut commits_summaries = String::new();
-    'commits_block: {
+/*     'commits_block: {
         match get_commits_in_range(
             &github_token,
             &owner,
@@ -185,10 +185,10 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             }
             None => log::error!("failed to get commits"),
         }
-    }
+    } */
     let mut issues_summaries = String::new();
 
-    'issues_block: {
+/*     'issues_block: {
         match get_issues_in_range(
             &github_token,
             &owner,
@@ -232,7 +232,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             }
             None => log::error!("failed to get issues"),
         }
-    }
+    } */
 
     let now = Utc::now();
     let a_week_ago = now - Duration::days(n_days as i64);

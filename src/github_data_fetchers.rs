@@ -3,6 +3,11 @@ use crate::utils::*;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use derivative::Derivative;
 use http_req::response::Response;
+use openai_flows::{
+    self,
+    chat::{self, ChatModel, ChatOptions},
+    OpenAIFlows,
+};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use store_flows::{get, set};
@@ -1241,6 +1246,240 @@ pub async fn search_discussions_integrated(
         login: Option<String>,
     }
 
+    let openai = OpenAIFlows::new();
+
+    let base_url = "https://api.github.com/graphql";
+
+    let query = format!(
+        r#"
+        query {{
+            search(query: "{search_query}", type: DISCUSSION, first: 100) {{
+                edges {{
+                    node {{
+                        ... on Discussion {{
+                            title
+                            url
+                            body
+                            author {{
+                                login
+                            }}
+                            createdAt
+                            upvoteCount
+                            comments (first: 100) {{
+                                edges {{
+                                    node {{
+                                        author {{
+                                            login
+                                        }}
+                                        body
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }}
+        }}
+        "#,
+        search_query = search_query
+    );
+    let mut git_mem_vec = Vec::with_capacity(100);
+    let mut text_out = String::from("DISCUSSIONS \n");
+
+    match github_http_post(&github_token, base_url, &query).await {
+        None => {
+            log::error!(
+                "Failed to send the request to get DiscussionRoot: {}",
+                base_url
+            );
+            return None;
+        }
+        Some(response) => match serde_json::from_slice::<DiscussionRoot>(&response) {
+            Err(e) => {
+                log::error!("Failed to parse the response for DiscussionRoot: {}", e);
+                return None;
+            }
+            Ok(results) => {
+                let empty_str = "".to_string();
+
+                if let Some(search) = results.data?.search {
+                    for edge_option in search.edges?.iter().filter_map(|e| e.as_ref()) {
+                        if let Some(discussion) = &edge_option.node {
+                            let date = discussion.created_at.date_naive();
+                            let title = discussion.title.as_ref().unwrap_or(&empty_str).to_string();
+                            let url = discussion.url.as_ref().unwrap_or(&empty_str).to_string();
+                            let author_login = discussion
+                                .author
+                                .as_ref()
+                                .and_then(|a| a.login.as_ref())
+                                .unwrap_or(&empty_str)
+                                .to_string();
+
+                            let upvotes_str = match discussion.upvote_count {
+                                Some(c) if c > 0 => format!("Upvotes: {}", c),
+                                _ => "".to_string(),
+                            };
+                            let body_text = match discussion.body.as_ref() {
+                                Some(text) => squeeze_fit_remove_quoted(&text, "```", 500, 0.6),
+                                None => "".to_string(),
+                            };
+                            let mut disuccsion_texts = format!(
+                                "Title: '{}' Url: '{}' Body: '{}' Created At: {} {} Author: {}\n",
+                                title, url, body_text, date, upvotes_str, author_login
+                            );
+
+                            if let Some(comments) = &discussion.comments {
+                                if let Some(ref edges) = comments.edges {
+                                    for comment_edge_option in
+                                        edges.iter().filter_map(|e| e.as_ref())
+                                    {
+                                        if let Some(comment) = &comment_edge_option.node {
+                                            let comment_texts = format!(
+                                                "{} comments: '{}'\n",
+                                                comment
+                                                    .author
+                                                    .as_ref()
+                                                    .and_then(|a| a.login.as_ref())
+                                                    .unwrap_or(&empty_str),
+                                                comment.body.as_ref().unwrap_or(&empty_str)
+                                            );
+
+                                            let stripped_comment_text = squeeze_fit_remove_quoted(
+                                                &comment_texts,
+                                                "```",
+                                                300,
+                                                0.6,
+                                            );
+                                            disuccsion_texts.push_str(&stripped_comment_text);
+                                        }
+                                    }
+                                }
+                            }
+                            let discussion_texts =
+                                squeeze_fit_remove_quoted(&disuccsion_texts, "```", 6000, 0.4);
+                            let target_str = match &target_person {
+                                Some(person) => format!("{}'s", person),
+                                None => "key participants'".to_string(),
+                            };
+                            let sys_prompt_1 =
+                                "Given the information on a GitHub discussion, your task is to analyze the content of the discussion posts. Extract key details including the main topic or question raised, any steps taken by the original author and commenters to address the problem, relevant discussions, and any identified solutions, consensus reached, or pending tasks.";
+                            let co = match disuccsion_texts.len() > 12000 {
+                                true => ChatOptions {
+                                    model: chat::ChatModel::GPT35Turbo16K,
+                                    system_prompt: Some(sys_prompt_1),
+                                    restart: true,
+                                    temperature: Some(0.7),
+                                    max_tokens: Some(192),
+                                    ..Default::default()
+                                },
+                                false => ChatOptions {
+                                    model: chat::ChatModel::GPT35Turbo,
+                                    system_prompt: Some(sys_prompt_1),
+                                    restart: true,
+                                    temperature: Some(0.7),
+                                    max_tokens: Some(128),
+                                    ..Default::default()
+                                },
+                            };
+
+                            let usr_prompt_1 = &format!(
+                                    "Based on the GitHub discussion post: {disuccsion_texts}, please list the following key details: The main topic or question raised in the discussion. Any steps or actions taken by the original author or commenters to address the discussion. Key discussions or points of view shared by participants in the discussion thread. Any solutions identified, consensus reached, or pending tasks if the discussion hasn't been resolved. The role and contribution of the user or commenters in the discussion. Provide a brief summary highlighting the core topic and emphasize the overarching contribution made by '{target_str}' to the resolution of this discussion, ensuring your response stays under 128 tokens."
+                                );
+
+                            match openai
+                                .chat_completion("discussion99", usr_prompt_1, &co)
+                                .await
+                            {
+                                Ok(r) => {
+                                    text_out.push_str(&(format!("{} {}", url, r.choice)));
+                                    git_mem_vec.push(GitMemory {
+                                        memory_type: MemoryType::Discussion,
+                                        name: author_login,
+                                        tag_line: title,
+                                        source_url: url,
+                                        payload: r.choice,
+                                        date: date,
+                                    });
+                                }
+
+                                Err(_e) => log::error!(
+                                    "Error generating discussion summary #{}: {}",
+                                    url,
+                                    _e
+                                ),
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    if git_mem_vec.is_empty() {
+        None
+    } else {
+        Some((text_out, git_mem_vec))
+    }
+}
+/* pub async fn search_discussions_integrated_chain(
+    github_token: &str,
+    search_query: &str,
+    target_person: &Option<String>,
+) -> Option<(String, Vec<GitMemory>)> {
+    #[derive(Debug, Deserialize)]
+    struct DiscussionRoot {
+        data: Option<Data>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Data {
+        search: Option<Search>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Search {
+        edges: Option<Vec<Option<Edge>>>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Edge {
+        node: Option<Discussion>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Discussion {
+        title: Option<String>,
+        url: Option<String>,
+        author: Option<Author>,
+        body: Option<String>,
+        comments: Option<Comments>,
+        #[serde(rename = "createdAt")]
+        created_at: DateTime<Utc>,
+        #[serde(rename = "upvoteCount")]
+        upvote_count: Option<u32>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Comments {
+        edges: Option<Vec<Option<CommentEdge>>>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CommentEdge {
+        node: Option<CommentNode>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct CommentNode {
+        author: Option<Author>,
+        body: Option<String>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct Author {
+        login: Option<String>,
+    }
+
     let base_url = "https://api.github.com/graphql";
 
     let query = format!(
@@ -1403,7 +1642,7 @@ pub async fn search_discussions_integrated(
     } else {
         Some((text_out, git_mem_vec))
     }
-}
+} */
 
 pub async fn search_users(github_token: &str, search_query: &str) -> Option<String> {
     #[derive(Debug, Deserialize)]

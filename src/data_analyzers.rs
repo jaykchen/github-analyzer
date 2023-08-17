@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use log;
 use openai_flows::{
     self,
-    chat::{self, ChatModel, ChatOptions},
+    chat::{self,  ChatOptions},
     OpenAIFlows,
 };
 use serde::Deserialize;
@@ -413,7 +413,7 @@ pub async fn analyze_commit_integrated(
                 },
             };
             let usr_prompt_1 = &format!(
-                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, emphasizing the intent behind the modifications and their implications for the project. Ensure clarity, but avoid granular technical details. Distinguish between core code and other types of changes. Conclude with a brief evaluation of {user_name}'s contributions in this commit and its potential impact on the project. Keep your response concise and under 128 tokens."
+                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, emphasizing the intent behind the modifications and their implications for the project. Ensure clarity, but avoid granular technical details. Distinguish between core code and other types of changes. Conclude with a brief evaluation of {user_name}'s contributions in this commit and its potential impact on the project. Keep your response concise and under 110 tokens."
             );
 
             let sha_serial = match url.rsplitn(2, "/").nth(0) {
