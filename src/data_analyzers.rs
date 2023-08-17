@@ -14,7 +14,7 @@ pub async fn is_valid_owner_repo_integrated(
     github_token: &str,
     owner: &str,
     repo: &str,
-) -> Option<GitMemory> {
+) -> Option<String> {
     #[derive(Deserialize)]
     struct CommunityProfile {
         health_percentage: u16,
@@ -33,11 +33,11 @@ pub async fn is_valid_owner_repo_integrated(
     match github_http_fetch(&github_token, &community_profile_url).await {
         Some(res) => match serde_json::from_slice::<CommunityProfile>(&res) {
             Ok(profile) => {
-                let description = profile
-                    .description
-                    .as_ref()
-                    .unwrap_or(&String::from(""))
-                    .to_string();
+                // let description = profile
+                //     .description
+                //     .as_ref()
+                //     .unwrap_or(&String::from(""))
+                //     .to_string();
 
                 if let Some(_) = &profile.readme {
                     match get_readme(github_token, owner, repo).await {
@@ -69,8 +69,7 @@ pub async fn is_valid_owner_repo_integrated(
                                     if r.choice.is_empty() {
                                         log::error!("OpenAI returned an empty summary.");
                                     } else {
-                                        slack_flows::send_message_to_channel("ik8", "general", r.choice.clone()).await;
-                                        payload = r.choice;
+                                        payload  =r.choice;
                                     }
                                 }
                                 Err(_e) => {
@@ -81,19 +80,20 @@ pub async fn is_valid_owner_repo_integrated(
                         None => {}
                     };
                 };
-                if payload.is_empty() {
-                    payload = description.clone();
-                }
-                return Some(GitMemory {
-                    memory_type: MemoryType::Meta,
-                    name: format!("{}/{}", owner, repo),
-                    tag_line: description,
-                    source_url: community_profile_url,
-                    payload: payload,
-                    date: profile
-                        .updated_at
-                        .map_or(Utc::now().date_naive(), |dt| dt.date_naive()),
-                });
+                Some(payload)
+                // if payload.is_empty() {
+                //     payload = description.clone();
+                // }
+                // return Some(GitMemory {
+                //     memory_type: MemoryType::Meta,
+                //     name: format!("{}/{}", owner, repo),
+                //     tag_line: description,
+                //     source_url: community_profile_url,
+                //     payload: payload,
+                //     date: profile
+                //         .updated_at
+                //         .map_or(Utc::now().date_naive(), |dt| dt.date_naive()),
+                // });
             }
             Err(e) => {
                 log::error!("Error parsing Community Profile: {:?}", e);
