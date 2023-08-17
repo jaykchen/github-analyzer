@@ -5,7 +5,7 @@ use derivative::Derivative;
 use http_req::response::Response;
 use openai_flows::{
     self,
-    chat::{self, ChatModel, ChatOptions},
+    chat::{self, ChatOptions},
     OpenAIFlows,
 };
 use serde::{Deserialize, Serialize};
@@ -1334,23 +1334,21 @@ pub async fn search_discussions_integrated(
                                         edges.iter().filter_map(|e| e.as_ref())
                                     {
                                         if let Some(comment) = &comment_edge_option.node {
-                                            let comment_texts = format!(
-                                                "{} comments: '{}'\n",
-                                                comment
-                                                    .author
-                                                    .as_ref()
-                                                    .and_then(|a| a.login.as_ref())
-                                                    .unwrap_or(&empty_str),
-                                                comment.body.as_ref().unwrap_or(&empty_str)
-                                            );
-
                                             let stripped_comment_text = squeeze_fit_remove_quoted(
-                                                &comment_texts,
+                                                &comment.body.as_ref().unwrap_or(&empty_str),
                                                 "```",
                                                 300,
                                                 0.6,
                                             );
-                                            disuccsion_texts.push_str(&stripped_comment_text);
+                                            let comment_author = comment
+                                                .author
+                                                .as_ref()
+                                                .and_then(|a| a.login.as_ref())
+                                                .unwrap_or(&empty_str);
+                                            disuccsion_texts.push_str(
+                                                &(format!(
+                                                    "{comment_author} comments: '{stripped_comment_text}'\n")),
+                                            );
                                         }
                                     }
                                 }
@@ -1361,8 +1359,7 @@ pub async fn search_discussions_integrated(
                                 Some(person) => format!("{}'s", person),
                                 None => "key participants'".to_string(),
                             };
-                            let sys_prompt_1 =
-                                "Given the information on a GitHub discussion, your task is to analyze the content of the discussion posts. Extract key details including the main topic or question raised, any steps taken by the original author and commenters to address the problem, relevant discussions, and any identified solutions, consensus reached, or pending tasks.";
+
                             let sys_prompt_1 = &format!(
                                     "Analyze the provided GitHub discussion. Identify the main topic, actions by participants, crucial viewpoints, solutions or consensus reached, and particularly highlight the contributions of specific individuals, especially '{target_str}'. Summarize without being verbose."
                                 );
@@ -1387,12 +1384,9 @@ pub async fn search_discussions_integrated(
                             };
 
                             let usr_prompt_1 = &format!(
-                                    "Based on the GitHub discussion post: {disuccsion_texts}, please list the following key details: The main topic or question raised in the discussion. Any steps or actions taken by the original author or commenters to address the discussion. Key discussions or points of view shared by participants in the discussion thread. Any solutions identified, consensus reached, or pending tasks if the discussion hasn't been resolved. The role and contribution of the user or commenters in the discussion. Provide a brief summary highlighting the core topic and emphasize the overarching contribution made by '{target_str}' to the resolution of this discussion, ensuring your response stays under 128 tokens."
-                                );
-                                let usr_prompt_1 = &format!(
                                     "Analyze the content: {disuccsion_texts}. Briefly summarize the central topic, participants' actions, primary viewpoints, and outcomes. Emphasize the role of '{target_str}' in driving the discussion or reaching a resolution. Aim for a succinct summary that is rich in analysis and under 192 tokens."
                                 );
-                                
+
                             match openai
                                 .chat_completion("discussion99", usr_prompt_1, &co)
                                 .await

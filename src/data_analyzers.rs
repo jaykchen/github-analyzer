@@ -5,12 +5,16 @@ use chrono::{DateTime, Utc};
 use log;
 use openai_flows::{
     self,
-    chat::{self,  ChatOptions},
+    chat::{self, ChatOptions},
     OpenAIFlows,
 };
 use serde::Deserialize;
 
-pub async fn is_valid_owner_repo(github_token: &str, owner: &str, repo: &str) -> Option<GitMemory> {
+pub async fn is_valid_owner_repo_integrated(
+    github_token: &str,
+    owner: &str,
+    repo: &str,
+) -> Option<GitMemory> {
     #[derive(Deserialize)]
     struct CommunityProfile {
         health_percentage: u16,
@@ -18,38 +22,84 @@ pub async fn is_valid_owner_repo(github_token: &str, owner: &str, repo: &str) ->
         readme: Option<String>,
         updated_at: Option<DateTime<Utc>>,
     }
+    let openai = OpenAIFlows::new();
 
     let community_profile_url = format!(
         "https://api.github.com/repos/{}/{}/community/profile",
         owner, repo
     );
 
+    let mut payload = String::new();
     match github_http_fetch(&github_token, &community_profile_url).await {
         Some(res) => match serde_json::from_slice::<CommunityProfile>(&res) {
             Ok(profile) => {
-                let description_content = profile
+                let description = profile
                     .description
                     .as_ref()
                     .unwrap_or(&String::from(""))
                     .to_string();
 
-                let readme_content = match &profile.readme {
-                    Some(_) => get_readme(github_token, owner, repo)
-                        .await
-                        .unwrap_or_default(),
-                    None => description_content.clone(),
-                };
+                match &profile.readme {
+                    Some(_) => {
+                        match get_readme(github_token, owner, repo).await {
+                            Some(content) => {
+                                let stripped_texts =
+                                    squeeze_fit_remove_quoted(&content, "```", 9000, 0.6);
 
-                Some(GitMemory {
+                                let sys_prompt_1 = &format!(
+        "You are given a GitHub profile of {owner}/{repo} and the README of their project. Your primary objective is to understand the user's involvement in the community, their expertise, and the project's core features and goals. Analyze the content with an emphasis on the user's contributions, the project's objectives, and its significance in the community."
+    );
+
+                                let co = match stripped_texts.len() > 12000 {
+                                    true => ChatOptions {
+                                        model: chat::ChatModel::GPT35Turbo16K,
+                                        system_prompt: Some(sys_prompt_1),
+                                        restart: true,
+                                        temperature: Some(0.7),
+                                        max_tokens: Some(192),
+                                        ..Default::default()
+                                    },
+                                    false => ChatOptions {
+                                        model: chat::ChatModel::GPT35Turbo,
+                                        system_prompt: Some(sys_prompt_1),
+                                        restart: true,
+                                        temperature: Some(0.7),
+                                        max_tokens: Some(128),
+                                        ..Default::default()
+                                    },
+                                };
+                                let usr_prompt_1 = &format!(
+        "Analyze the profile information of {owner}/{repo} and the README: {stripped_texts}. Provide a concise summary of the user's contributions to the GitHub community, their primary areas of expertise, and a brief overview of the project, highlighting its main features, goals, and importance. Keep your insights succinct and under 110 tokens."
+    );
+
+                                match openai
+                                    .chat_completion(&format!("profile-99"), usr_prompt_1, &co)
+                                    .await
+                                {
+                                    Ok(r) => payload = r.choice,
+                                    Err(_e) => {
+                                        log::error!("Error summarizing meta data: {}", _e);
+                                    }
+                                }
+                            }
+                            None => {}
+                        };
+                    }
+                    None => {}
+                };
+                if payload.is_empty() {
+                    payload = description.clone();
+                }
+                return Some(GitMemory {
                     memory_type: MemoryType::Meta,
                     name: format!("{}/{}", owner, repo),
-                    tag_line: description_content,
+                    tag_line: description,
                     source_url: community_profile_url,
-                    payload: readme_content,
+                    payload: payload,
                     date: profile
                         .updated_at
                         .map_or(Utc::now().date_naive(), |dt| dt.date_naive()),
-                })
+                });
             }
             Err(e) => {
                 log::error!("Error parsing Community Profile: {:?}", e);
@@ -65,6 +115,7 @@ pub async fn is_valid_owner_repo(github_token: &str, owner: &str, repo: &str) ->
         }
     }
 }
+
 pub async fn process_issues(
     github_token: &str,
     inp_vec: Vec<Issue>,
@@ -441,6 +492,7 @@ pub async fn analyze_commit_integrated(
         }
     }
 }
+
 /* pub async fn analyze_commit_integrated_chain(
     github_token: &str,
     user_name: &str,

@@ -49,29 +49,22 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         .as_str()
         .map(|n| n.to_string());
 
-    let start_msg_str = match &user_name {
-        Some(name) => format!(
-            "Processing data for owner: {}, repo: {}, and user: {}",
-            owner, repo, name
-        ),
-        None => format!(
-            "You didn't input a user's name. Bot will then create a report on the weekly progress of {}/{}.",
-            owner, repo
-        ),
-    };
-    send_response(
-        200,
-        vec![(String::from("content-type"), String::from("text/plain"))],
-        start_msg_str.as_bytes().to_vec(),
-    );
+    // let start_msg_str = match &user_name {
+    //     Some(name) => format!(
+    //         "Processing data for owner: {}, repo: {}, and user: {}",
+    //         owner, repo, name
+    //     ),
+    //     None => format!(
+    //         "You didn't input a user's name. Bot will then create a report on the weekly progress of {}/{}.",
+    //         owner, repo
+    //     ),
+    // };
 
-    let mut message_que = std::collections::VecDeque::<String>::new();
-
-    let n_days = 30u16;
+    let n_days = 7u16;
     let mut report = Vec::<String>::new();
 
     let mut _profile_data = String::new();
-    match is_valid_owner_repo(&github_token, &owner, &repo).await {
+    match is_valid_owner_repo_integrated(&github_token, &owner, &repo).await {
         None => {
             send_response(
                 400,
@@ -83,7 +76,9 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             return;
         }
         Some(gm) => {
-            _profile_data = format!("About {}/{}: {}", owner, repo, gm.payload);
+            _profile_data = format!("About {}/{}: {}", owner, repo, gm.payload.clone());
+            send_message_to_channel("ik8", "ch_pro", gm.payload).await;
+
         }
     }
 
@@ -124,14 +119,8 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let start_msg_str =
         format!("exploring {addressee_str} GitHub contributions to `{owner}/{repo}` project");
 
-    // send_response(
-    //     200,
-    //     vec![(String::from("content-type"), String::from("text/plain"))],
-    //     start_msg_str.as_bytes().to_vec(),
-    // );
-
     let mut commits_summaries = String::new();
-/*     'commits_block: {
+    'commits_block: {
         match get_commits_in_range(
             &github_token,
             &owner,
@@ -144,28 +133,12 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             Some((count, mut commits_vec)) => {
                 let commits_str = commits_vec
                     .iter()
-                    .map(|com| {
-                        let sha = com
-                            .source_url
-                            .rsplitn(2, '/')
-                            .nth(0)
-                            .unwrap_or("1234567")
-                            .chars()
-                            .take(7)
-                            .collect::<String>();
-
-                        format!("<a href=\"{}\">{}</a>", com.source_url, sha)
-                    })
+                    .map(|com| com.source_url.to_owned())
                     .collect::<Vec<String>>()
                     .join("\n");
-                let commits_head_str = format!("found {count} commits");
-                let commits_msg_str = format!("{}:\n{}", commits_head_str.clone(), commits_str);
-                report.push(format!("{}", commits_msg_str.clone()));
-                send_response(
-                    200,
-                    vec![(String::from("content-type"), String::from("text/html"))],
-                    commits_msg_str.as_bytes().to_vec(),
-                );
+
+                report.push(format!("found {count} commits:\n{commits_str}"));
+
                 if count == 0 {
                     break 'commits_block;
                 }
@@ -185,10 +158,10 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             }
             None => log::error!("failed to get commits"),
         }
-    } */
+    }
     let mut issues_summaries = String::new();
 
-/*     'issues_block: {
+    'issues_block: {
         match get_issues_in_range(
             &github_token,
             &owner,
@@ -201,16 +174,12 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             Some((count, issue_vec)) => {
                 let issues_str = issue_vec
                     .iter()
-                    .map(|issue| issue.url.rsplitn(2, '/').nth(0).unwrap_or("1234"))
-                    .collect::<Vec<&str>>()
-                    .join(", ");
-                let issues_msg_str = format!("found {} issues: {}", count, issues_str);
-                report.push(format!("{issues_msg_str}\n"));
-                send_response(
-                    200,
-                    vec![(String::from("content-type"), String::from("text/plain"))],
-                    issues_msg_str.as_bytes().to_vec(),
-                );
+                    .map(|issue| issue.url.to_owned())
+                    .collect::<Vec<String>>()
+                    .join("\n");
+
+                report.push(format!("found {count} issues:\n{issues_str}"));
+
                 if count == 0 {
                     break 'issues_block;
                 }
@@ -225,21 +194,22 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     Some((summary, _, issues_vec)) => {
                         send_message_to_channel("ik8", "ch_iss", summary.clone()).await;
                         issues_summaries = summary;
-
                     }
                     None => log::error!("processing issues failed"),
                 }
             }
             None => log::error!("failed to get issues"),
         }
-    } */
+    }
 
     let now = Utc::now();
     let a_week_ago = now - Duration::days(n_days as i64);
     let n_days_ago_str = a_week_ago.format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
     let discussion_query = match &user_name {
-        Some(user_name) => format!("repo:{owner}/{repo} involves: {user_name} updated:>{n_days_ago_str}"),
+        Some(user_name) => {
+            format!("repo:{owner}/{repo} involves: {user_name} updated:>{n_days_ago_str}")
+        }
         None => format!("repo:{owner}/{repo} updated:>{n_days_ago_str}"),
     };
 
@@ -249,17 +219,11 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             let count = discussion_vec.len();
             let discussions_str = discussion_vec
                 .iter()
-                .map(|discussion| {
-                    discussion
-                        .source_url
-                        .rsplitn(2, '/')
-                        .nth(0)
-                        .unwrap_or("1234")
-                })
-                .collect::<Vec<&str>>()
-                .join(", ");
-            let discussions_msg_str = format!("found {} discussions:\n {}", count, discussions_str);
-            report.push(format!("{discussions_msg_str}\n"));
+                .map(|discussion| discussion.source_url.to_owned())
+                .collect::<Vec<String>>()
+                .join("\n");
+
+            report.push(format!("found {count} discussions:\n {discussions_str}"));
             send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
             discussion_data = summary;
         }
