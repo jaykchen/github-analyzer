@@ -44,28 +44,18 @@ pub async fn is_valid_owner_repo_integrated(
                         Some(content) => {
                             // let stripped_texts =
                             //     squeeze_fit_remove_quoted(&content, "```", 9000, 0.6);
-                            let content = content.chars().take(24000).collect::<String>();
+                            let content = content.chars().take(18000).collect::<String>();
                             let sys_prompt_1 = &format!(
     "You are given a GitHub profile of {owner}/{repo} and the README of their project. Your primary objective is to understand the user's involvement in the community, their expertise, and the project's core features and goals. Analyze the content with an emphasis on the user's contributions, the project's objectives, and its significance in the community."
 );
 
-                            let co = match content.len() > 12000 {
-                                true => ChatOptions {
-                                    model: chat::ChatModel::GPT35Turbo16K,
-                                    system_prompt: Some(sys_prompt_1),
-                                    restart: true,
-                                    temperature: Some(0.7),
-                                    max_tokens: Some(384),
-                                    ..Default::default()
-                                },
-                                false => ChatOptions {
-                                    model: chat::ChatModel::GPT35Turbo,
-                                    system_prompt: Some(sys_prompt_1),
-                                    restart: true,
-                                    temperature: Some(0.7),
-                                    max_tokens: Some(256),
-                                    ..Default::default()
-                                },
+                            let co = ChatOptions {
+                                model: chat::ChatModel::GPT35Turbo16K,
+                                system_prompt: Some(sys_prompt_1),
+                                restart: true,
+                                temperature: Some(0.7),
+                                max_tokens: Some(256),
+                                ..Default::default()
                             };
                             let usr_prompt_1 = &format!(
     "Analyze the profile information of {owner}/{repo} and the README: {content}. Provide a concise summary of the user's contributions to the GitHub community, their primary areas of expertise, and a brief overview of the project, highlighting its main features, goals, and importance. Keep your insights succinct and under 110 tokens."
