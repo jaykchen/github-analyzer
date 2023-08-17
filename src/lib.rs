@@ -64,12 +64,6 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
     let mut _profile_data = String::new();
 
-    let content = get_readme(&github_token, &owner, &repo).await.unwrap();
-    let readme_summary = analyze_readme(&content).await.unwrap();
-    send_message_to_channel("ik8", "ch_err", readme_summary.clone()).await;
-
-    _profile_data = readme_summary;
-
     match is_valid_owner_repo_integrated(&github_token, &owner, &repo).await {
         None => {
             send_response(

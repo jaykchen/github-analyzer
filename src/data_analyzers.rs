@@ -29,53 +29,59 @@ pub async fn is_valid_owner_repo_integrated(
         owner, repo
     );
 
-    let mut payload = String::new();
+    let mut description = String::new();
+    let mut date = Utc::now().date_naive();
     match github_http_fetch(&github_token, &community_profile_url).await {
         Some(res) => match serde_json::from_slice::<CommunityProfile>(&res) {
             Ok(profile) => {
-                let description = profile
+                description = profile
                     .description
                     .as_ref()
                     .unwrap_or(&String::from(""))
                     .to_string();
-
-                if let Some(_) = &profile.readme {
-                    match get_readme(github_token, owner, repo).await {
-                        Some(content) => {
-                            let content = content.chars().take(20000).collect::<String>();
-                            let summary = analyze_readme(&content).await.unwrap_or("".to_string());
-                            payload = summary;
-                        }
-                        None => {}
-                    };
-                };
-                if payload.is_empty() {
-                    payload = description.clone();
-                }
-                return Some(GitMemory {
-                    memory_type: MemoryType::Meta,
-                    name: format!("{}/{}", owner, repo),
-                    tag_line: description,
-                    source_url: community_profile_url,
-                    payload: payload,
-                    date: profile
-                        .updated_at
-                        .map_or(Utc::now().date_naive(), |dt| dt.date_naive()),
-                });
+                date = profile
+                    .updated_at
+                    .as_ref()
+                    .unwrap_or(&Utc::now())
+                    .date_naive();
             }
-            Err(e) => {
-                log::error!("Error parsing Community Profile: {:?}", e);
-                None
-            }
+            Err(e) => log::error!("Error parsing Community Profile: {:?}", e),
         },
-        None => {
-            log::error!(
-                "Error fetching Community Profile: {:?}",
-                community_profile_url
-            );
-            None
-        }
+        None => log::error!(
+            "Error fetching Community Profile: {:?}",
+            community_profile_url
+        ),
     }
+
+    let mut payload = String::new();
+    match get_readme(github_token, owner, repo).await {
+        Some(content) => {
+            let content = content.chars().take(20000).collect::<String>();
+            match analyze_readme(&content).await {
+                Some(summary) => payload = summary,
+                None => log::error!("Error parsing README.md: {}/{}", owner, repo),
+            }
+        }
+        None => log::error!("Error fetching README.md: {}/{}", owner, repo),
+    };
+    if description.is_empty() && payload.is_empty() {
+        return None;
+    }
+
+    if description.is_empty() {
+        description = payload.clone();
+    } else if payload.is_empty() {
+        payload = description.clone();
+    }
+
+    Some(GitMemory {
+        memory_type: MemoryType::Meta,
+        name: format!("{}/{}", owner, repo),
+        tag_line: description,
+        source_url: community_profile_url,
+        payload: payload,
+        date: date,
+    })
 }
 
 pub async fn process_issues(
