@@ -1215,6 +1215,7 @@ pub async fn search_discussions_integrated(
     struct Discussion {
         title: Option<String>,
         url: Option<String>,
+        html_url: Option<String>,
         author: Option<Author>,
         body: Option<String>,
         comments: Option<Comments>,
@@ -1307,6 +1308,7 @@ pub async fn search_discussions_integrated(
                             let date = discussion.created_at.date_naive();
                             let title = discussion.title.as_ref().unwrap_or(&empty_str).to_string();
                             let url = discussion.url.as_ref().unwrap_or(&empty_str).to_string();
+                            let source_url = discussion.html_url.as_ref().unwrap_or(&empty_str).to_string();
                             let author_login = discussion
                                 .author
                                 .as_ref()
@@ -1396,7 +1398,7 @@ pub async fn search_discussions_integrated(
                                         memory_type: MemoryType::Discussion,
                                         name: author_login,
                                         tag_line: title,
-                                        source_url: url,
+                                        source_url: source_url,
                                         payload: r.choice,
                                         date: date,
                                     });

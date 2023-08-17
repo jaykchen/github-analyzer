@@ -158,6 +158,7 @@ pub async fn analyze_issue_integrated(
         None => "".to_string(),
     };
     let issue_url = issue.url.to_string();
+    let source_url = issue.html_url.to_string();
 
     let labels = issue
         .labels
@@ -249,7 +250,7 @@ pub async fn analyze_issue_integrated(
                 memory_type: MemoryType::Issue,
                 name: name,
                 tag_line: issue_title,
-                source_url: issue_url,
+                source_url: source_url,
                 payload: r.choice,
                 date: issue_date,
             };
