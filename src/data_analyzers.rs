@@ -3,7 +3,9 @@ use crate::octocrab_compat::{Comment, Issue};
 use crate::utils::*;
 use chrono::{DateTime, Utc};
 use log;
+use openai_flows::{self, OpenAIFlows, chat::{self, ChatModel, ChatOptions}};
 use serde::Deserialize;
+
 
 pub async fn is_valid_owner_repo(github_token: &str, owner: &str, repo: &str) -> Option<GitMemory> {
     #[derive(Deserialize)]
@@ -92,6 +94,114 @@ pub async fn process_issues(
     Some((issues_summaries, count, git_memory_vec))
 }
 pub async fn analyze_issue_integrated(
+    github_token: &str,
+    issue: &Issue,
+    target_person: Option<&str>,
+) -> Option<(String, GitMemory)> {
+    let openai = OpenAIFlows::new();
+
+    let issue_creator_name = &issue.user.login;
+    let issue_title = issue.title.to_string();
+    let issue_number = issue.number;
+    let issue_date = issue.created_at.date_naive();
+
+    let issue_body = match &issue.body {
+        Some(body) => squeeze_fit_remove_quoted(body, "```", 500, 0.6),
+        None => "".to_string(),
+    };
+    let issue_url = issue.url.to_string();
+
+    let labels = issue
+        .labels
+        .iter()
+        .map(|lab| lab.name.clone())
+        .collect::<Vec<String>>()
+        .join(", ");
+
+    let mut all_text_from_issue = format!(
+        "User '{}', opened an issue titled '{}', labeled '{}', with the following post: '{}'.",
+        issue_creator_name, issue_title, labels, issue_body
+    );
+
+    let mut current_page = 1;
+    loop {
+        let url_str = format!("{}/comments?&page={}", issue_url, current_page);
+
+        match github_http_fetch(&github_token, &url_str).await {
+            Some(res) => match serde_json::from_slice::<Vec<Comment>>(res.as_slice()) {
+                Err(_e) => {
+                    log::error!(
+                        "Error parsing Vec<Comment> at page {}: {:?}",
+                        current_page,
+                        _e
+                    );
+                    break;
+                }
+                Ok(comments_obj) => {
+                    if comments_obj.is_empty() {
+                        break;
+                    }
+                    for comment in &comments_obj {
+                        let comment_body = match &comment.body {
+                            Some(body) => squeeze_fit_remove_quoted(body, "```", 300, 0.6),
+                            None => "".to_string(),
+                        };
+                        let commenter = &comment.user.login;
+                        let commenter_input = format!("{} commented: {}", commenter, comment_body);
+
+                        all_text_from_issue.push_str(&commenter_input);
+                    }
+                }
+            },
+            None => {
+                break;
+            }
+        }
+
+        current_page += 1;
+    }
+    let all_text_from_issue = squeeze_fit_remove_quoted(&all_text_from_issue, "```", 9000, 0.4);
+    let target_str = target_person.unwrap_or("key participants");
+
+    let sys_prompt_1 = &format!(
+        "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to analyze the content of the issue posts. Extract key details including the main problem or question raised, the environment in which the issue occurred, any steps taken by the user and commenters to address the problem, relevant discussions, and any identified solutions, consesus reached, or pending tasks."
+    );
+
+    let co = ChatOptions {
+        model: chat::ChatModel::GPT35Turbo16K,
+        system_prompt: Some(sys_prompt_1),
+        restart: true,
+        temperature: Some(0.7),
+        max_tokens: Some(128),
+        ..Default::default()
+    };
+    let usr_prompt_1 = &format!(
+        "Based on the GitHub issue posts: {all_text_from_issue}, please list the following key details: The main problem or question raised in the issue. The environment or conditions in which the issue occurred (e.g., hardware, OS). Any steps or actions taken by the user or commenters to address the issue. Key discussions or points of view shared by participants in the issue thread. Any solutions identified, consensus reached, or pending tasks if the issue hasn't been resolved. The role and contribution of the user or commenters in the issue. Provide a brief summary highlighting the core problem and emphasize the overarching contribution made by '{target_str}' to the resolution of this issue, ensuring your response stays under 128 tokens."
+    );
+
+    match openai.chat_completion(&format!("issue_{issue_number}"), usr_prompt_1, &co).await {
+        Ok(r) => {
+            let mut out = format!("{issue_url} ");
+            out.push_str(&r.choice);
+            let name = target_person.unwrap_or(&issue_creator_name).to_string();
+            let gm = GitMemory {
+                memory_type: MemoryType::Issue,
+                name: name,
+                tag_line: issue_title,
+                source_url: issue_url,
+                payload: r.choice,
+                date: issue_date,
+            };
+
+            Some((out, gm))
+        }
+        Err(_e) => {
+            log::error!("Error generating issue summary #{}: {}", issue_number, _e);
+            None
+        }
+    }
+}
+/* pub async fn analyze_issue_integrated_chain(
     github_token: &str,
     issue: &Issue,
     target_person: Option<&str>,
@@ -200,7 +310,7 @@ pub async fn analyze_issue_integrated(
             None
         }
     }
-}
+} */
 
 pub async fn analyze_commit_integrated(
     github_token: &str,
@@ -208,6 +318,8 @@ pub async fn analyze_commit_integrated(
     tag_line: &str,
     url: &str,
 ) -> Option<String> {
+    let openai = OpenAIFlows::new();
+
     let commit_patch_str = format!("{url}.patch");
     let uri = http_req::uri::Uri::try_from(commit_patch_str.as_str())
         .expect(&format!("Error generating URI from {:?}", commit_patch_str));
