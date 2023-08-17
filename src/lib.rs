@@ -239,8 +239,8 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let n_days_ago_str = a_week_ago.format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
     let discussion_query = match &user_name {
-        Some(user_name) => format!("involves: {user_name} updated:>{n_days_ago_str}"),
-        None => format!("updated:>{n_days_ago_str}"),
+        Some(user_name) => format!("repo:{owner}/{repo} involves: {user_name} updated:>{n_days_ago_str}"),
+        None => format!("repo:{owner}/{repo} updated:>{n_days_ago_str}"),
     };
 
     let mut discussion_data = String::new();
