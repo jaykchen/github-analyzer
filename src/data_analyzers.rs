@@ -44,7 +44,7 @@ pub async fn is_valid_owner_repo_integrated(
                         Some(content) => {
                             // let stripped_texts =
                             //     squeeze_fit_remove_quoted(&content, "```", 9000, 0.6);
-
+                            let content = content.chars().take(24000).collect::<String>();
                             let sys_prompt_1 = &format!(
     "You are given a GitHub profile of {owner}/{repo} and the README of their project. Your primary objective is to understand the user's involvement in the community, their expertise, and the project's core features and goals. Analyze the content with an emphasis on the user's contributions, the project's objectives, and its significance in the community."
 );

@@ -63,6 +63,10 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let n_days = 7u16;
     let mut report = Vec::<String>::new();
 
+    let readme = get_readme(&github_token, &owner, &repo).await.unwrap();
+
+    send_message_to_channel("ik8", "ch_pro", readme).await;
+
     let mut _profile_data = String::new();
     match is_valid_owner_repo_integrated(&github_token, &owner, &repo).await {
         None => {
@@ -77,9 +81,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         }
         Some(gm) => {
             _profile_data = format!("About {}/{}: {}", owner, repo, gm.payload.clone());
-            send_message_to_channel("ik8", "ch_pro", gm.payload).await;
             send_message_to_channel("ik8", "ch_pro", gm.tag_line).await;
-
         }
     }
 
