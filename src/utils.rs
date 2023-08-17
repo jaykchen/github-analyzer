@@ -64,7 +64,6 @@ pub fn squeeze_fit_remove_quoted(
 ) -> String {
     let mut body = String::new();
     let mut inside_quote = false;
-    let max_len = max_len as usize;
 
     for line in inp_str.lines() {
         if line.contains(quote_mark) {
@@ -73,23 +72,32 @@ pub fn squeeze_fit_remove_quoted(
         }
 
         if !inside_quote {
-            body.push_str(line);
+            let cleaned_line = line
+                .split_whitespace()
+                .filter(|word| word.len() < 150)
+                .collect::<Vec<&str>>()
+                .join(" ");
+            body.push_str(&cleaned_line);
             body.push('\n');
         }
     }
 
-    let body_len = body.split_whitespace().count();
-    let n_take_from_beginning = (max_len as f32 * split) as usize;
-    let n_keep_till_end = max_len - n_take_from_beginning;
-    match body_len > max_len {
-        false => body,
-        true => {
-            let mut body_text_vec = body.split_whitespace().collect::<Vec<&str>>();
-            let drain_to = std::cmp::min(body_len, max_len);
-            body_text_vec.drain(n_take_from_beginning..drain_to - n_keep_till_end);
-            body_text_vec.join(" ")
-        }
-    }
+    let body_words: Vec<&str> = body.split_whitespace().collect();
+    let body_len = body_words.len();
+    let n_take_from_beginning = (body_len as f32 * split) as usize;
+    let n_keep_till_end = body_len - n_take_from_beginning;
+
+    let final_text = if body_len > max_len as usize {
+        let mut body_text_vec = body_words.to_vec();
+        let drain_start = n_take_from_beginning;
+        let drain_end = body_len - n_keep_till_end;
+        body_text_vec.drain(drain_start..drain_end);
+        body_text_vec.join(" ")
+    } else {
+        body
+    };
+
+    final_text
 }
 
 pub async fn chain_of_chat(

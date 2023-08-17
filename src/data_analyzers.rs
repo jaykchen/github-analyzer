@@ -144,9 +144,7 @@ pub async fn analyze_issue_integrated(
                         };
                         let commenter = &comment.user.login;
                         let commenter_input = format!("{} commented: {}", commenter, comment_body);
-                        if all_text_from_issue.len() > 45_000 {
-                            break;
-                        }
+
                         all_text_from_issue.push_str(&commenter_input);
                     }
                 }
@@ -158,7 +156,7 @@ pub async fn analyze_issue_integrated(
 
         current_page += 1;
     }
-
+    let all_text_from_issue = squeeze_fit_remove_quoted(&all_text_from_issue, "```", 6000, 0.4);
     let target_str = target_person.unwrap_or("key participants");
 
     let sys_prompt_1 = &format!(
@@ -264,6 +262,7 @@ pub async fn analyze_commit_integrated(
                     inside_diff_block = false;
                 }
             }
+
             let sys_prompt_1 = &format!(
                 "You are provided with a commit patch by the user {user_name}. Your task is to parse this data, focusing on the following sections: the Date Line, Subject Line, Diff Files, Diff Changes, Sign-off Line, and the File Changes Summary. Extract key elements of the commit, and the types of files affected, prioritizing code files, scripts, then documentation. Be particularly careful to distinguish between changes made to core code files and modifications made to documentation files, even if they contain technical content. Compile a list of the extracted key elements."
             );

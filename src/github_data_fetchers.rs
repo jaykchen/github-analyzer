@@ -1316,7 +1316,6 @@ pub async fn search_discussions_integrated(
                                 Some(text) => squeeze_fit_remove_quoted(&text, "```", 500, 0.6),
                                 None => "".to_string(),
                             };
-
                             let mut disuccsion_texts = format!(
                                 "Title: '{}' Url: '{}' Body: '{}' Created At: {} {} Author: {}\n",
                                 title, url, body_text, date, upvotes_str, author_login
@@ -1341,7 +1340,7 @@ pub async fn search_discussions_integrated(
                                             let stripped_comment_text = squeeze_fit_remove_quoted(
                                                 &comment_texts,
                                                 "```",
-                                                500,
+                                                300,
                                                 0.6,
                                             );
                                             disuccsion_texts.push_str(&stripped_comment_text);
@@ -1349,6 +1348,8 @@ pub async fn search_discussions_integrated(
                                     }
                                 }
                             }
+                            let discussion_texts =
+                                squeeze_fit_remove_quoted(&disuccsion_texts, "```", 6000, 0.4);
                             let target_str = match &target_person {
                                 Some(person) => format!("{}'s", person),
                                 None => "key participants'".to_string(),

@@ -124,11 +124,11 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let start_msg_str =
         format!("exploring {addressee_str} GitHub contributions to `{owner}/{repo}` project");
 
-    send_response(
-        200,
-        vec![(String::from("content-type"), String::from("text/plain"))],
-        start_msg_str.as_bytes().to_vec(),
-    );
+    // send_response(
+    //     200,
+    //     vec![(String::from("content-type"), String::from("text/plain"))],
+    //     start_msg_str.as_bytes().to_vec(),
+    // );
 
     let mut commits_summaries = String::new();
     'commits_block: {
@@ -214,7 +214,6 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 if count == 0 {
                     break 'issues_block;
                 }
-                //
 
                 match process_issues(
                     &github_token,
@@ -259,7 +258,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 })
                 .collect::<Vec<&str>>()
                 .join(", ");
-            let discussions_msg_str = format!("found {} discussions: {}", count, discussions_str);
+            let discussions_msg_str = format!("found {} discussions:\n {}", count, discussions_str);
             report.push(format!("{discussions_msg_str}\n"));
             send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
             discussion_data = summary;
