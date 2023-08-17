@@ -390,12 +390,8 @@ pub async fn analyze_commit_integrated(
                     inside_diff_block = false;
                 }
             }
-
             let sys_prompt_1 = &format!(
-                "You are provided with a commit patch by the user {user_name}. Your task is to parse this data, focusing on the following sections: the Date Line, Subject Line, Diff Files, Diff Changes, Sign-off Line, and the File Changes Summary. Extract key elements of the commit, and the types of files affected, prioritizing code files, scripts, then documentation. Be particularly careful to distinguish between changes made to core code files and modifications made to documentation files, even if they contain technical content. Compile a list of the extracted key elements."
-            );
-            let sys_prompt_1 = &format!(
-                "You have a commit patch from the user {user_name}. Your main task is to analyze the commit's essence, focusing on the changes in the context of the project's goals. Examine sections like the Date Line, Subject Line, Diff Files, Diff Changes, Sign-off Line, and File Changes Summary. Emphasize the nature and significance of the changes, particularly differentiating between core code modifications, script updates, and documentation adjustments. Aim for a deeper understanding rather than mere extraction."
+                "Given a commit patch from the user {user_name}, you are to analyze its content. Focus on the core essence of the changes without delving into granular technical specifics. Particularly, identify the purpose of the changes, the files impacted, and the broader implications for the project. Remember to strike a balance between brevity and capturing the essential details."
             );
 
             let co = match stripped_texts.len() > 12000 {
@@ -416,12 +412,8 @@ pub async fn analyze_commit_integrated(
                     ..Default::default()
                 },
             };
-
             let usr_prompt_1 = &format!(
-                "Based on the provided commit patch: {stripped_texts}, and description: {tag_line}, extract and present the following key elements: a high-level summary of the changes made, and the types of files affected. Prioritize data on changes to code files first, then scripts, and lastly documentation. Pay attention to the file types and ensure the distinction between documentation changes and core code changes, even when the documentation contains highly technical language. Please compile your findings into a list, with each key element represented as a separate item. Using the key elements you extracted from the commit patch, provide a summary of the user's contributions to the project. Include the types of files affected, and the overall changes made. When describing the affected files, make sure to differentiate between changes to core code files, scripts, and documentation files. Present your summary in this format: '(summary of changes). (overall impact of changes).' Please ensure your answer stayed below 128 tokens."
-            );
-            let usr_prompt_1 = &format!(
-                "Analyze the commit patch: {stripped_texts}, and description: {tag_line}. Offer a concise summary touching upon the main changes and their significance within the project. Start with modifications to the codebase, then scripts, and finish with documentation updates. Ensure you distinguish between core code and documentation, even if the latter contains intricate technical details. Conclude with a brief assessment of {user_name}'s contributions in this commit, emphasizing its potential impact on the project. Format your summary as: '(summary of changes). (project impact).' Ensure your response is under 128 tokens."
+                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, emphasizing the intent behind the modifications and their implications for the project. Ensure clarity, but avoid granular technical details. Distinguish between core code and other types of changes. Conclude with a brief evaluation of {user_name}'s contributions in this commit and its potential impact on the project. Keep your response concise and under 128 tokens."
             );
 
             let sha_serial = match url.rsplitn(2, "/").nth(0) {
