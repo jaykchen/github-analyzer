@@ -75,7 +75,13 @@ pub async fn is_valid_owner_repo_integrated(
                                 .chat_completion(&format!("profile-99"), usr_prompt_1, &co)
                                 .await
                             {
-                                Ok(r) => payload = r.choice,
+                                Ok(r) => {
+                                    if r.choice.is_empty() {
+                                        log::error!("OpenAI returned an empty summary.");
+                                    } else {
+                                        payload = r.choice;
+                                    }
+                                }
                                 Err(_e) => {
                                     log::error!("Error summarizing meta data: {}", _e);
                                 }
