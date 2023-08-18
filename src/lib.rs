@@ -200,7 +200,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            report.push(format!("found {count} discussions:\n {discussions_str}"));
+            report.push(format!("{count} discussions were referenced in analysis:\n {discussions_str}"));
             send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
             discussion_data = summary;
         }

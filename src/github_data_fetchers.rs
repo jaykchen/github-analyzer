@@ -1259,6 +1259,7 @@ pub async fn search_discussions_integrated(
                         ... on Discussion {{
                             title
                             url
+                            html_url
                             body
                             author {{
                                 login
