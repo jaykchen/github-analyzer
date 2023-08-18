@@ -361,7 +361,7 @@ pub async fn get_issues_in_range(
     github_token: &str,
     owner: &str,
     repo: &str,
-    user_name: Option<&str>,
+    user_name: Option<String>,
     range: u16,
 ) -> Option<(usize, Vec<Issue>)> {
     #[derive(Debug, Deserialize)]
@@ -492,7 +492,7 @@ pub async fn get_commits_in_range(
     github_token: &str,
     owner: &str,
     repo: &str,
-    user_name: Option<&str>,
+    user_name: Option<String>,
     range: u16,
 ) -> Option<(usize, Vec<GitMemory>)> {
     #[derive(Debug, Deserialize, Serialize)]

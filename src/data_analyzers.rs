@@ -87,13 +87,13 @@ pub async fn is_valid_owner_repo_integrated(
 pub async fn process_issues(
     github_token: &str,
     inp_vec: Vec<Issue>,
-    target_person: Option<&str>,
+    target_person: Option<String>,
 ) -> Option<(String, usize, Vec<GitMemory>)> {
     let mut issues_summaries = String::new();
     let mut git_memory_vec = vec![];
 
     for issue in &inp_vec {
-        match analyze_issue_integrated(github_token, issue, target_person).await {
+        match analyze_issue_integrated(github_token, issue, target_person.clone()).await {
             None => {
                 log::error!("Error analyzing issue: {:?}", issue.url.to_string());
                 continue;
@@ -149,7 +149,7 @@ pub async fn analyze_readme(content: &str) -> Option<String> {
 pub async fn analyze_issue_integrated(
     github_token: &str,
     issue: &Issue,
-    target_person: Option<&str>,
+    target_person: Option<String>,
 ) -> Option<(String, GitMemory)> {
     let openai = OpenAIFlows::new();
 
@@ -215,7 +215,7 @@ pub async fn analyze_issue_integrated(
         current_page += 1;
     }
     let all_text_from_issue = squeeze_fit_remove_quoted(&all_text_from_issue, "```", 9000, 0.4);
-    let target_str = target_person.unwrap_or("key participants");
+    let target_str = target_person.clone().unwrap_or("key participants".to_string());
 
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
@@ -250,7 +250,7 @@ pub async fn analyze_issue_integrated(
         Ok(r) => {
             let mut out = format!("{issue_url} ");
             out.push_str(&r.choice);
-            let name = target_person.unwrap_or(&issue_creator_name).to_string();
+            let name = target_person.unwrap_or(issue_creator_name.to_string()).to_string();
             let gm = GitMemory {
                 memory_type: MemoryType::Issue,
                 name: name,

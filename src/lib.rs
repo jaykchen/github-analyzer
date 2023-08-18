@@ -83,7 +83,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
     match &user_name {
         Some(user_name) => {
-            if !is_code_contributor(&github_token, &owner, &repo, &user_name.clone()).await {
+            if !is_code_contributor(&github_token, &owner, &repo, user_name).await {
                 // send_response(
                 //     200,
                 //     vec![(String::from("content-type"), String::from("text/plain"))],
@@ -120,15 +120,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
     let mut commits_summaries = String::new();
     'commits_block: {
-        match get_commits_in_range(
-            &github_token,
-            &owner,
-            &repo,
-            Some(&user_name.clone().unwrap().to_string()),
-            n_days,
-        )
-        .await
-        {
+        match get_commits_in_range(&github_token, &owner, &repo, user_name.clone(), n_days).await {
             Some((count, mut commits_vec)) => {
                 let commits_str = commits_vec
                     .iter()
@@ -161,15 +153,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let mut issues_summaries = String::new();
 
     'issues_block: {
-        match get_issues_in_range(
-            &github_token,
-            &owner,
-            &repo,
-            Some(&user_name.clone().unwrap().to_string()),
-            n_days,
-        )
-        .await
-        {
+        match get_issues_in_range(&github_token, &owner, &repo, user_name.clone(), n_days).await {
             Some((count, issue_vec)) => {
                 let issues_str = issue_vec
                     .iter()
@@ -183,13 +167,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     break 'issues_block;
                 }
 
-                match process_issues(
-                    &github_token,
-                    issue_vec,
-                    Some(&user_name.clone().unwrap().to_string()),
-                )
-                .await
-                {
+                match process_issues(&github_token, issue_vec, user_name.clone()).await {
                     Some((summary, _, issues_vec)) => {
                         send_message_to_channel("ik8", "ch_iss", summary.clone()).await;
                         issues_summaries = summary;
@@ -202,7 +180,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     }
 
     let now = Utc::now();
-    let a_week_ago = now - Duration::days(n_days as i64);
+    let a_week_ago = now - Duration::days(n_days as i64 + 30);
     let n_days_ago_str = a_week_ago.format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
     let discussion_query = match &user_name {
