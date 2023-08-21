@@ -99,6 +99,33 @@ pub fn squeeze_fit_remove_quoted(
 
     final_text
 }
+pub fn squeeze_fit_post_texts(inp_str: &str, max_len: u16, split: f32) -> String {
+    let bpe = tiktoken_rs::cl100k_base().unwrap();
+
+    let input_token_vec = bpe.encode_ordinary(inp_str);
+    let input_len = input_token_vec.len();
+    if input_len < max_len as usize {
+        return inp_str.to_string();
+    }
+    // // Filter out the tokens corresponding to lines with undesired patterns
+    // let mut filtered_tokens = Vec::new();
+    // for line in inp_str.lines() {
+    //     let mut tokens_for_line = bpe.encode_ordinary(line);
+    //     if !line.contains("{{") && !line.contains("}}") {
+    //         filtered_tokens.extend(tokens_for_line.drain(..));
+    //     }
+    // }
+    let n_take_from_beginning = (input_len as f32 * split).ceil() as usize;
+    let n_take_from_end = max_len as usize - n_take_from_beginning;
+
+    let mut concatenated_tokens = Vec::with_capacity(max_len as usize);
+    concatenated_tokens.extend_from_slice(&input_token_vec[..n_take_from_beginning]);
+    concatenated_tokens.extend_from_slice(&input_token_vec[input_len - n_take_from_end..]);
+
+    bpe.decode(concatenated_tokens)
+        .ok()
+        .map_or("failed to decode tokens".to_string(), |s| s.to_string())
+}
 
 pub async fn chain_of_chat(
     sys_prompt_1: &str,
