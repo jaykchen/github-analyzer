@@ -214,8 +214,10 @@ pub async fn analyze_issue_integrated(
 
         current_page += 1;
     }
-    let all_text_from_issue = squeeze_fit_remove_quoted(&all_text_from_issue, "```", 9000, 0.4);
-    let target_str = target_person.clone().unwrap_or("key participants".to_string());
+    let all_text_from_issue = squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.4);
+    let target_str = target_person
+        .clone()
+        .unwrap_or("key participants".to_string());
 
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
@@ -250,7 +252,9 @@ pub async fn analyze_issue_integrated(
         Ok(r) => {
             let mut out = format!("{issue_url} ");
             out.push_str(&r.choice);
-            let name = target_person.unwrap_or(issue_creator_name.to_string()).to_string();
+            let name = target_person
+                .unwrap_or(issue_creator_name.to_string())
+                .to_string();
             let gm = GitMemory {
                 memory_type: MemoryType::Issue,
                 name: name,
@@ -409,15 +413,7 @@ pub async fn analyze_commit_integrated(
             let mut stripped_texts = String::with_capacity(text.len());
             let mut inside_diff_block = false;
 
-            let max_length = 24_000;
-
             for line in text.lines() {
-                if stripped_texts.len() + line.len() > max_length {
-                    let remaining = max_length - stripped_texts.len();
-                    stripped_texts.push_str(&line.chars().take(remaining).collect::<String>());
-                    break;
-                }
-
                 if line.starts_with("diff --git") {
                     inside_diff_block = true;
                     stripped_texts.push_str(line);
@@ -441,6 +437,8 @@ pub async fn analyze_commit_integrated(
                     inside_diff_block = false;
                 }
             }
+            let stripped_texts = squeeze_fit_post_texts(&stripped_texts, 12_000, 0.8);
+
             let sys_prompt_1 = &format!(
                 "Given a commit patch from the user {user_name}, you are to analyze its content. Focus on the core essence of the changes without delving into granular technical specifics. Particularly, identify the purpose of the changes, the files impacted, and the broader implications for the project. Remember to strike a balance between brevity and capturing the essential details."
             );
@@ -493,102 +491,7 @@ pub async fn analyze_commit_integrated(
     }
 }
 
-/* pub async fn analyze_commit_integrated_chain(
-    github_token: &str,
-    user_name: &str,
-    tag_line: &str,
-    url: &str,
-) -> Option<String> {
-    let openai = OpenAIFlows::new();
 
-    let commit_patch_str = format!("{url}.patch");
-    let uri = http_req::uri::Uri::try_from(commit_patch_str.as_str())
-        .expect(&format!("Error generating URI from {:?}", commit_patch_str));
-    let mut writer = Vec::new();
-    match http_req::request::Request::new(&uri)
-        .method(http_req::request::Method::GET)
-        .header("User-Agent", "flows-network connector")
-        .header("Content-Type", "plain/text")
-        .header("Authorization", &format!("Bearer {github_token}"))
-        .send(&mut writer)
-    {
-        Ok(res) => {
-            if !res.status_code().is_success() {
-                log::error!("Github http error {:?}", res.status_code());
-                return None;
-            };
-
-            let text = String::from_utf8_lossy(writer.as_slice());
-
-            let mut stripped_texts = String::with_capacity(text.len());
-            let mut inside_diff_block = false;
-
-            let max_length = 18_000;
-
-            for line in text.lines() {
-                if stripped_texts.len() + line.len() > max_length {
-                    let remaining = max_length - stripped_texts.len();
-                    stripped_texts.push_str(&line.chars().take(remaining).collect::<String>());
-                    break;
-                }
-
-                if line.starts_with("diff --git") {
-                    inside_diff_block = true;
-                    stripped_texts.push_str(line);
-                    stripped_texts.push('\n');
-                    continue;
-                }
-
-                if inside_diff_block {
-                    if line
-                        .chars()
-                        .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
-                    {
-                        continue;
-                    }
-                }
-
-                stripped_texts.push_str(line);
-                stripped_texts.push('\n');
-
-                if line.is_empty() {
-                    inside_diff_block = false;
-                }
-            }
-
-            let sys_prompt_1 = &format!(
-                "You are provided with a commit patch by the user {user_name}. Your task is to parse this data, focusing on the following sections: the Date Line, Subject Line, Diff Files, Diff Changes, Sign-off Line, and the File Changes Summary. Extract key elements of the commit, and the types of files affected, prioritizing code files, scripts, then documentation. Be particularly careful to distinguish between changes made to core code files and modifications made to documentation files, even if they contain technical content. Compile a list of the extracted key elements."
-            );
-
-            let usr_prompt_1 = &format!(
-                "Based on the provided commit patch: {stripped_texts}, and description: {tag_line}, extract and present the following key elements: a high-level summary of the changes made, and the types of files affected. Prioritize data on changes to code files first, then scripts, and lastly documentation. Pay attention to the file types and ensure the distinction between documentation changes and core code changes, even when the documentation contains highly technical language. Please compile your findings into a list, with each key element represented as a separate item."
-            );
-
-            let usr_prompt_2 = &format!(
-                "Using the key elements you extracted from the commit patch, provide a summary of the user's contributions to the project. Include the types of files affected, and the overall changes made. When describing the affected files, make sure to differentiate between changes to core code files, scripts, and documentation files. Present your summary in this format: '(summary of changes). (overall impact of changes).' Please ensure your answer stayed below 128 tokens."
-            );
-
-            let sha_serial = match url.rsplitn(2, "/").nth(0) {
-                Some(s) => s.chars().take(5).collect::<String>(),
-                None => "0000".to_string(),
-            };
-            chain_of_chat(
-                sys_prompt_1,
-                usr_prompt_1,
-                &format!("commit-{sha_serial}"),
-                256,
-                usr_prompt_2,
-                128,
-                &format!("analyze_commit-{sha_serial}"),
-            )
-            .await
-        }
-        Err(_e) => {
-            log::error!("Error getting response from Github: {:?}", _e);
-            None
-        }
-    }
-} */
 
 pub async fn process_commits(github_token: &str, inp_vec: &mut Vec<GitMemory>) -> Option<String> {
     let mut commits_summaries = String::new();
