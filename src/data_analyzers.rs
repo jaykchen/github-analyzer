@@ -731,7 +731,7 @@ pub async fn correlate_commits_issues_discussions(
     );
 
     let usr_prompt_2 = &format!(
-        "Merge the identified impactful technical contributions and their interconnections into a coherent summary for {target_str} over the week. Describe how these contributions align with the project's technical objectives. Pinpoint recurring technical patterns or trends and shed light on the synergy between individual efforts and their collective progression. Detail both the weight of each contribution and their interconnectedness in shaping the project. Limit to 256 tokens."
+        "Merge the identified impactful technical contributions and their interconnections into a coherent summary, in bullet points, for {target_str} over the week. Describe how these contributions align with the project's technical objectives. Pinpoint recurring technical patterns or trends and shed light on the synergy between individual efforts and their collective progression. Detail both the weight of each contribution and their interconnectedness in shaping the project. Limit to 256 tokens."
     );
 
     chain_of_chat(
