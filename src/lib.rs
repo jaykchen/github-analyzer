@@ -133,7 +133,8 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 if count == 0 {
                     break 'commits_block;
                 }
-                match process_commits(&github_token, &mut commits_vec).await {
+                let turbo = if count > 9 { true } else { false };
+                match process_commits(&github_token, &mut commits_vec, turbo).await {
                     Some(summary) => {
                         commits_summaries = summary;
                     }
@@ -200,7 +201,9 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            report.push(format!("{count} discussions were referenced in analysis:\n {discussions_str}"));
+            report.push(format!(
+                "{count} discussions were referenced in analysis:\n {discussions_str}"
+            ));
             send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
             discussion_data = summary;
         }

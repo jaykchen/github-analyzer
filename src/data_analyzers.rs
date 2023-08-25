@@ -388,6 +388,7 @@ pub async fn analyze_commit_integrated(
     user_name: &str,
     tag_line: &str,
     url: &str,
+    turbo: bool,
 ) -> Option<String> {
     let openai = OpenAIFlows::new();
 
@@ -437,7 +438,9 @@ pub async fn analyze_commit_integrated(
                     inside_diff_block = false;
                 }
             }
-            let stripped_texts = squeeze_fit_post_texts(&stripped_texts, 12_000, 0.8);
+            let stripped_texts = if turbo {squeeze_fit_post_texts(&stripped_texts, 12_000, 0.8)} else {
+                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
+            };
 
             let sys_prompt_1 = &format!(
                 "Given a commit patch from the user {user_name}, you are to analyze its content. Focus on the core essence of the changes without delving into granular technical specifics. Particularly, identify the purpose of the changes, the files impacted, and the broader implications for the project. Remember to strike a balance between brevity and capturing the essential details."
@@ -493,7 +496,7 @@ pub async fn analyze_commit_integrated(
 
 
 
-pub async fn process_commits(github_token: &str, inp_vec: &mut Vec<GitMemory>) -> Option<String> {
+pub async fn process_commits(github_token: &str, inp_vec: &mut Vec<GitMemory>, turbo: bool) -> Option<String> {
     let mut commits_summaries = String::new();
 
     let max_entries = 20; // Maximum entries to process
@@ -509,6 +512,7 @@ pub async fn process_commits(github_token: &str, inp_vec: &mut Vec<GitMemory>) -
             &commit_obj.name,
             &commit_obj.tag_line,
             &commit_obj.source_url,
+            turbo
         )
         .await
         {
