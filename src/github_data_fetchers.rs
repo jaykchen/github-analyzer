@@ -356,7 +356,6 @@ pub async fn get_readme(github_token: &str, owner: &str, repo: &str) -> Option<S
         }
     }
 }
-
 pub async fn get_issues_in_range(
     github_token: &str,
     owner: &str,
@@ -370,55 +369,31 @@ pub async fn get_issues_in_range(
         pub total_count: Option<u64>,
     }
 
-    let now = Utc::now();
-    let n_days_ago = (now - Duration::days(range as i64))
+    let n_days_ago = (Utc::now() - Duration::days(range as i64))
         .format("%Y-%m-%dT%H:%M:%SZ")
         .to_string();
 
-    let user_str = user_name
-        .map(|u| format!("involves:{}", u))
-        .unwrap_or_default();
+    let user_str = user_name.map_or(String::new(), |u| format!("involves:{}", u));
 
     let query = format!("repo:{owner}/{repo} is:issue {user_str} updated:>{n_days_ago}");
     let encoded_query = urlencoding::encode(&query);
 
+    let url_str = format!(
+        "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100",
+        encoded_query
+    );
+
     let mut issue_vec = vec![];
-    let mut total_pages = None;
-    let mut current_page = 1;
-
-    loop {
-        let url_str = format!(
-            "https://api.github.com/search/issues?q={}&sort=updated&order=desc&page={}",
-            encoded_query, current_page
-        );
-
-        match github_http_fetch(&github_token, &url_str).await {
-            Some(res) => match serde_json::from_slice::<Page<Issue>>(res.as_slice()) {
-                Err(e) => {
-                    log::error!("error: {:?}", e);
-                    break;
-                }
-                Ok(issue_page) => {
-                    if total_pages.is_none() {
-                        if let Some(total) = issue_page.total_count {
-                            total_pages = Some(((total as f64) / 30.0).ceil() as usize);
-                        }
-                    }
-
-                    for issue in issue_page.items {
-                        issue_vec.push(issue.clone());
-                    }
-
-                    current_page += 1;
-                    if current_page > total_pages.unwrap_or(usize::MAX) {
-                        break;
-                    }
-                }
-            },
-            None => {
-                break;
+    match github_http_fetch(&github_token, &url_str).await {
+        Some(res) => match serde_json::from_slice::<Page<Issue>>(res.as_slice()) {
+            Err(e) => {
+                log::error!("error: {:?}", e);
             }
-        }
+            Ok(issue_page) => {
+                issue_vec = issue_page.items;
+            }
+        },
+        None => log::error!("Github issues not found."),
     }
     let count = issue_vec.len();
     Some((count, issue_vec))
@@ -569,9 +544,9 @@ pub async fn get_commits_in_range(
             }
         },
     }
-if user_name.is_none() {
-    git_memory_vec = weekly_git_memory_vec.clone();
-}
+    if user_name.is_none() {
+        git_memory_vec = weekly_git_memory_vec.clone();
+    }
     let count = git_memory_vec.len();
     Some((count, git_memory_vec, weekly_git_memory_vec))
 }

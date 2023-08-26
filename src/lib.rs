@@ -96,14 +96,15 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     .join("\n");
 
                 report.push(format!("found {count} commits:\n{commits_str}"));
+
                 let mut is_sparce = false;
-                if count == 0 {
-                    break 'commits_block;
-                }
-                if count < 3 {
-                    is_sparce = true;
-                }
-                let turbo = if count > 4 { true } else { false };
+                let mut turbo = false;
+                match count {
+                    0 => break 'commits_block,
+                    1..=2 => is_sparce = true,
+                    6.. => turbo = true,
+                    _ => {}
+                };
                 match process_commits(&github_token, &mut commits_vec, turbo, is_sparce).await {
                     Some(summary) => {
                         commits_summaries = summary;
@@ -118,15 +119,9 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                         .collect::<Vec<String>>()
                         .join("\n");
 
-                    commits_summaries = format!("Here is the log of weekly commits for the entire repository: {weekly_commits_log}, here is the contributor's commits details: {commits_summaries}");
+                    commits_summaries = format!("Here is the contributor's commits details: {commits_summaries}, here is the log of weekly commits for the entire repository: {weekly_commits_log}");
                 }
                 send_message_to_channel("ik8", "ch_rep", commits_summaries.clone()).await;
-                if !commits_vec.is_empty() {
-                    for com in commits_vec {
-                        sleep(std::time::Duration::from_secs(2));
-                        // send_message_to_channel("ik8", "ch_rep", com.payload).await;
-                    }
-                }
             }
             None => log::error!("failed to get commits"),
         }
@@ -144,14 +139,26 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
                 report.push(format!("found {count} issues:\n{issues_str}"));
 
-                if count == 0 {
-                    break 'issues_block;
-                }
-                let turbo = if count > 4 { true } else { false };
+                let mut is_sparce = false;
+                let mut turbo = false;
 
-                match process_issues(&github_token, issue_vec, user_name.clone(), turbo).await {
+                match count {
+                    0 => break 'issues_block,
+                    1..=2 => is_sparce = true,
+                    4.. => turbo = true,
+                    _ => {}
+                };
+                match process_issues(
+                    &github_token,
+                    issue_vec,
+                    user_name.clone(),
+                    turbo,
+                    is_sparce,
+                )
+                .await
+                {
                     Some((summary, _, issues_vec)) => {
-                        // send_message_to_channel("ik8", "ch_iss", summary.clone()).await;
+                        send_message_to_channel("ik8", "ch_iss", summary.clone()).await;
                         issues_summaries = summary;
                     }
                     None => log::error!("processing issues failed"),
@@ -195,7 +202,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         match &user_name {
             Some(target_person) => {
                 report = vec![format!(
-                    "No useful data found for {}, you may try `/search` to find out more about {}",
+                    "No useful data found for {}, you may try alternative means to find out more about {}",
                     target_person, target_person
                 )];
             }
@@ -224,7 +231,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     }
 
     let output = report.join("\n");
-    send_message_to_channel("ik8", "ch_err", output.clone()).await;
+    send_message_to_channel("ik8", "general", output.clone()).await;
 
     send_response(
         200,

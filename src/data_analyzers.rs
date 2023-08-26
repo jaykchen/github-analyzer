@@ -89,12 +89,15 @@ pub async fn process_issues(
     inp_vec: Vec<Issue>,
     target_person: Option<String>,
     turbo: bool,
+    is_sparce: bool,
 ) -> Option<(String, usize, Vec<GitMemory>)> {
     let mut issues_summaries = String::new();
     let mut git_memory_vec = vec![];
 
     for issue in &inp_vec {
-        match analyze_issue_integrated(github_token, issue, target_person.clone(), turbo).await {
+        match analyze_issue_integrated(github_token, issue, target_person.clone(), turbo, is_sparce)
+            .await
+        {
             None => {
                 log::error!("Error analyzing issue: {:?}", issue.url.to_string());
                 continue;
@@ -152,6 +155,7 @@ pub async fn analyze_issue_integrated(
     issue: &Issue,
     target_person: Option<String>,
     turbo: bool,
+    is_sparce: bool,
 ) -> Option<(String, GitMemory)> {
     let openai = OpenAIFlows::new();
 
@@ -161,7 +165,13 @@ pub async fn analyze_issue_integrated(
     let issue_date = issue.created_at.date_naive();
 
     let issue_body = match &issue.body {
-        Some(body) => squeeze_fit_remove_quoted(body, "```", 500, 0.6),
+        Some(body) => {
+            if is_sparce {
+                squeeze_fit_remove_quoted(body, "```", 500, 0.6)
+            } else {
+                squeeze_fit_remove_quoted(body, "```", 400, 0.7)
+            }
+        }
         None => "".to_string(),
     };
     let issue_url = issue.url.to_string();
@@ -189,8 +199,14 @@ pub async fn analyze_issue_integrated(
             Ok(comments_obj) => {
                 for comment in &comments_obj {
                     let comment_body = match &comment.body {
-                        Some(body) => squeeze_fit_remove_quoted(body, "```", 300, 0.6),
-                        None => "".to_string(),
+                        Some(body) => {
+                            if is_sparce {
+                                squeeze_fit_remove_quoted(body, "```", 300, 0.6)
+                            } else {
+                                squeeze_fit_remove_quoted(body, "```", 200, 0.7)
+                            }
+                        }
+                        None => continue,
                     };
                     let commenter = &comment.user.login;
                     let commenter_input = format!("{} commented: {}", commenter, comment_body);
@@ -199,12 +215,10 @@ pub async fn analyze_issue_integrated(
                 }
             }
         },
-        None => {}
+        None => log::error!("Error fetching comments for issue: {:?}", url_str),
     }
 
-    let target_str = target_person
-        .clone()
-        .unwrap_or("key participants".to_string());
+    let target_str = target_person.clone().map_or("key participants".to_string(), |t| t.to_string());
 
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
@@ -226,7 +240,7 @@ pub async fn analyze_issue_integrated(
                 system_prompt: Some(sys_prompt_1),
                 restart: true,
                 temperature: Some(0.7),
-                max_tokens: Some(192),
+                max_tokens: Some(128),
                 ..Default::default()
             };
         }
@@ -234,7 +248,7 @@ pub async fn analyze_issue_integrated(
     };
 
     let usr_prompt_1 = &format!(
-        "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 128 tokens."
+        "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 110 tokens."
     );
 
     match openai
@@ -242,11 +256,8 @@ pub async fn analyze_issue_integrated(
         .await
     {
         Ok(r) => {
-            let mut out = format!("{issue_url} ");
-            out.push_str(&r.choice);
-            let name = target_person
-                .unwrap_or(issue_creator_name.to_string())
-                .to_string();
+            let out = format!("{} {}", issue_url, r.choice);
+            let name = target_person.map_or(issue_creator_name.to_string(), |t| t.to_string());
             let gm = GitMemory {
                 memory_type: MemoryType::Issue,
                 name: name,
@@ -517,16 +528,13 @@ pub async fn correlate_commits_issues_discussions(
         )
     });
 
-    let target_str = match target_person {
-        Some(person) => format!("{}'s", person),
-        None => "key participants'".to_string(),
-    };
+    let target_str = target_person.map_or("key participants'".to_string(), |t| format!("{t}'s"));
 
     let sys_prompt_1 =
         "Analyze the GitHub activity data and profile data over the week to detect both key impactful contributions and connections between commits, issues, and discussions. Highlight specific code changes, resolutions, and improvements. Furthermore, trace evidence of commits addressing specific issues, discussions leading to commits, or issues spurred by discussions. The aim is to map out both the impactful technical advancements and the developmental narrative of the project.";
 
     let usr_prompt_1 = &format!(
-        "From {profile_str}, {commits_str}, {issues_str}, and {discussions_str}, detail {target_str}'s significant technical contributions. Enumerate individual tasks, code enhancements, and bug resolutions, emphasizing impactful contributions. Concurrently, identify connections: commits that appear to resolve specific issues, discussions that may have catalyzed certain commits, or issues influenced by preceding discussions. Extract tangible instances showcasing both impact and interconnections within the week."
+        "From {profile_str}, {commits_str}, {issues_str}, and {discussions_str}, detail {target_str} significant technical contributions. Enumerate individual tasks, code enhancements, and bug resolutions, emphasizing impactful contributions. Concurrently, identify connections: commits that appear to resolve specific issues, discussions that may have catalyzed certain commits, or issues influenced by preceding discussions. Extract tangible instances showcasing both impact and interconnections within the week."
     );
 
     let usr_prompt_2 = &format!(
