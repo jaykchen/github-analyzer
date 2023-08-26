@@ -48,17 +48,6 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         .as_str()
         .map(|n| n.to_string());
 
-    // let start_msg_str = match &user_name {
-    //     Some(name) => format!(
-    //         "Processing data for owner: {}, repo: {}, and user: {}",
-    //         owner, repo, name
-    //     ),
-    //     None => format!(
-    //         "You didn't input a user's name. Bot will then create a report on the weekly progress of {}/{}.",
-    //         owner, repo
-    //     ),
-    // };
-
     let n_days = 7u16;
     let mut report = Vec::<String>::new();
 
@@ -79,44 +68,22 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             _profile_data = format!("About {}/{}: {}", owner, repo, gm.payload);
         }
     }
-    send_message_to_channel("ik8", "ch_pro", _profile_data.clone()).await;
+    // send_message_to_channel("ik8", "ch_pro", _profile_data.clone()).await;
 
-    match &user_name {
-        Some(user_name) => {
-            if !is_code_contributor(&github_token, &owner, &repo, user_name).await {
-                // send_response(
-                //     200,
-                //     vec![(String::from("content-type"), String::from("text/plain"))],
-                //     format!(
-                //         "{} hasn't contributed code to {}/{}. Bot will try to find out {}'s other contributions.",
-                //         user_name, owner, repo, user_name
-                //     ).as_bytes()
-                //     .to_vec(),
+    // match &user_name {
+    //     Some(user_name) => {
+    //         if !is_code_contributor(&github_token, &owner, &repo, user_name).await {}
+    //     }
+    //     None => {}
+    // }
 
-                // );
-            }
-        }
-        None => {
-            // send_response(
-            //     200,
-            //     vec![(String::from("content-type"), String::from("text/plain"))],
-            //     format!(
-            //         "You didn't input a user's name. Bot will then create a report on the weekly progress of {}/{}.",
-            //         owner, repo
-            //     ).as_bytes()
-            //     .to_vec(),
+    // let addressee_str = match &user_name {
+    //     Some(user_name) => format!("{}'s", user_name),
+    //     None => String::from("key community participants'"),
+    // };
 
-            // );
-        }
-    }
-
-    let addressee_str = match &user_name {
-        Some(user_name) => format!("{}'s", user_name),
-        None => String::from("key community participants'"),
-    };
-
-    let start_msg_str =
-        format!("exploring {addressee_str} GitHub contributions to `{owner}/{repo}` project");
+    // let start_msg_str =
+    //     format!("exploring {addressee_str} GitHub contributions to `{owner}/{repo}` project");
 
     let mut commits_summaries = String::new();
     'commits_block: {
@@ -144,7 +111,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 if !commits_vec.is_empty() {
                     for com in commits_vec {
                         sleep(std::time::Duration::from_secs(2));
-                        send_message_to_channel("ik8", "ch_rep", com.payload).await;
+                        // send_message_to_channel("ik8", "ch_rep", com.payload).await;
                     }
                 }
             }
@@ -171,7 +138,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
                 match process_issues(&github_token, issue_vec, user_name.clone(), turbo).await {
                     Some((summary, _, issues_vec)) => {
-                        send_message_to_channel("ik8", "ch_iss", summary.clone()).await;
+                        // send_message_to_channel("ik8", "ch_iss", summary.clone()).await;
                         issues_summaries = summary;
                     }
                     None => log::error!("processing issues failed"),
@@ -205,7 +172,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             report.push(format!(
                 "{count} discussions were referenced in analysis:\n {discussions_str}"
             ));
-            send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
+            // send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
             discussion_data = summary;
         }
         None => log::error!("failed to get discussions"),
@@ -243,9 +210,12 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         }
     }
 
+    let output = report.join("\n");
+    send_message_to_channel("ik8", "ch_err", output.clone()).await;
+
     send_response(
         200,
         vec![(String::from("content-type"), String::from("text/plain"))],
-        report.join("\n").as_bytes().to_vec(),
+        output.as_bytes().to_vec(),
     );
 }

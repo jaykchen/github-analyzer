@@ -527,50 +527,38 @@ pub async fn get_commits_in_range(
     };
 
     let base_commit_url =
-        format!("https://api.github.com/repos/{owner}/{repo}/commits?{author_str}");
+        format!("https://api.github.com/repos/{owner}/{repo}/commits?{author_str}&per_page=100");
 
     let mut git_memory_vec = vec![];
     let now = Utc::now();
     let n_days_ago = (now - Duration::days(range as i64)).date_naive();
-    let mut current_page = 1;
-    loop {
-        let commits_query_url = format!("{base_commit_url}&page={}", current_page);
-        match github_http_fetch(&github_token, &commits_query_url).await {
-            None => {
-                log::error!("Error fetching commits");
-                break;
+    match github_http_fetch(&github_token, &base_commit_url).await {
+        None => {
+            log::error!("Error fetching commits");
+        }
+        Some(res) => match serde_json::from_slice::<Vec<GithubCommit>>(res.as_slice()) {
+            Err(e) => {
+                log::error!("Error parsing commits: {:?}", e);
             }
-            Some(res) => match serde_json::from_slice::<Vec<GithubCommit>>(res.as_slice()) {
-                Err(e) => {
-                    log::error!("Error parsing commits: {:?}", e);
-                    break;
-                }
-                Ok(commits) => {
-                    if commits.is_empty() {
-                        break; // If the page is empty, exit the loop
-                    }
-
-                    for commit in commits {
-                        if let Some(commit_date) = &commit.commit.author.date {
-                            if commit_date.date_naive() > n_days_ago {
-                                if let Some(author) = &commit.author {
-                                    git_memory_vec.push(GitMemory {
-                                        memory_type: MemoryType::Commit,
-                                        name: author.login.clone(), // clone as author.login is String type
-                                        tag_line: commit.commit.message.clone(),
-                                        source_url: commit.html_url.clone(),
-                                        payload: String::from(""),
-                                        date: commit_date.date_naive(),
-                                    });
-                                }
+            Ok(commits) => {
+                for commit in commits {
+                    if let Some(commit_date) = &commit.commit.author.date {
+                        if commit_date.date_naive() > n_days_ago {
+                            if let Some(author) = &commit.author {
+                                git_memory_vec.push(GitMemory {
+                                    memory_type: MemoryType::Commit,
+                                    name: author.login.clone(), // clone as author.login is String type
+                                    tag_line: commit.commit.message.clone(),
+                                    source_url: commit.html_url.clone(),
+                                    payload: String::from(""),
+                                    date: commit_date.date_naive(),
+                                });
                             }
                         }
                     }
-
-                    current_page += 1;
                 }
-            },
-        }
+            }
+        },
     }
 
     let count = git_memory_vec.len();
@@ -1429,7 +1417,6 @@ pub async fn search_discussions_integrated(
         Some((text_out, git_mem_vec))
     }
 }
-
 
 pub async fn search_users(github_token: &str, search_query: &str) -> Option<String> {
     #[derive(Debug, Deserialize)]
