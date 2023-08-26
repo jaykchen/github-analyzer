@@ -76,6 +76,9 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     //     None => send_message_to_channel("ik8", "ch_pro", "no_username".to_string()).await,
     // }
 
+    let mut commits_count = 0;
+    let mut issues_count = 0;
+
     let mut commits_summaries = String::new();
     'commits_block: {
         match get_commits_in_range(&github_token, &owner, &repo, user_name.clone(), n_days).await {
@@ -87,7 +90,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     .join("\n");
 
                 report.push(format!("found {count} commits:\n{commits_str}"));
-                send_message_to_channel("ik8", "ch_pro", commits_str.to_string()).await;
+                send_message_to_channel("ik8", "ch_rep", commits_str.to_string()).await;
                 let mut is_sparce = false;
                 let mut turbo = false;
                 match count {
@@ -96,6 +99,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     6.. => turbo = true,
                     _ => {}
                 };
+                commits_count = count;
                 match process_commits(&github_token, &mut commits_vec, turbo, is_sparce).await {
                     Some(summary) => {
                         commits_summaries = summary;
@@ -140,6 +144,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     4.. => turbo = true,
                     _ => {}
                 };
+                issues_count = count;
                 match process_issues(
                     &github_token,
                     issue_vec,
@@ -190,6 +195,8 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         None => log::error!("failed to get discussions"),
     }
 
+    let is_jumbo = (commits_count + issues_count) > 15;
+
     if commits_summaries.is_empty() && issues_summaries.is_empty() && discussion_data.is_empty() {
         match &user_name {
             Some(target_person) => {
@@ -210,6 +217,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             Some(&issues_summaries),
             Some(&discussion_data),
             user_name.as_deref(),
+            is_jumbo,
         )
         .await
         {

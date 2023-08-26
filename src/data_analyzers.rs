@@ -431,13 +431,10 @@ pub async fn process_commits(
         .await
         {
             Some(summary) => {
-                commit_obj.payload = summary;
-
                 if commits_summaries.len() > 24_000 {
                     break;
                 }
-                commits_summaries
-                    .push_str(&format!("{} {}\n", commit_obj.date, commit_obj.payload));
+                commits_summaries.push_str(&format!("{} {}\n", commit_obj.date, summary));
 
                 processed_count += 1;
             }
@@ -496,6 +493,7 @@ pub async fn correlate_commits_issues_discussions(
     _issues_summary: Option<&str>,
     _discussions_summary: Option<&str>,
     target_person: Option<&str>,
+    is_jumbo: bool,
 ) -> Option<String> {
     let total_space = 16000; // 16k tokens
 
@@ -553,20 +551,39 @@ pub async fn correlate_commits_issues_discussions(
         "From {profile_str}, {commits_str}, {issues_str}, and {discussions_str}, detail {target_str} significant technical contributions. Enumerate individual tasks, code enhancements, and bug resolutions, emphasizing impactful contributions. Concurrently, identify connections: commits that appear to resolve specific issues, discussions that may have catalyzed certain commits, or issues influenced by preceding discussions. Extract tangible instances showcasing both impact and interconnections within the week."
     );
 
+    let size_str = if is_jumbo {
+        "less than 700 tokens"
+    } else {
+        "less than 230 tokens"
+    };
+
     let usr_prompt_2 = &format!(
-        "Merge the identified impactful technical contributions and their interconnections into a coherent summary for {target_str} over the week. Describe how these contributions align with the project's technical objectives. Pinpoint recurring technical patterns or trends and shed light on the synergy between individual efforts and their collective progression. Detail both the weight of each contribution and their interconnectedness in shaping the project, please use bullet-points format in your reply. Limit to 256 tokens."
+        "Merge the identified impactful technical contributions and their interconnections into a coherent summary for {target_str} over the week. Describe how these contributions align with the project's technical objectives. Pinpoint recurring technical patterns or trends and shed light on the synergy between individual efforts and their collective progression. Detail both the weight of each contribution and their interconnectedness in shaping the project, please use bullet-points format in your reply. Limit to {size_str}."
     );
 
-    chain_of_chat(
-        sys_prompt_1,
-        usr_prompt_1,
-        "correlate-99",
-        512,
-        usr_prompt_2,
-        256,
-        "correlate_commits_issues_discussions",
-    )
-    .await
+    if is_jumbo {
+        chain_of_chat(
+            sys_prompt_1,
+            usr_prompt_1,
+            "correlate-99",
+            1536,
+            usr_prompt_2,
+            768,
+            "correlate_commits_issues_discussions",
+        )
+        .await
+    } else {
+        chain_of_chat(
+            sys_prompt_1,
+            usr_prompt_1,
+            "correlate-99",
+            512,
+            usr_prompt_2,
+            256,
+            "correlate_commits_issues_discussions",
+        )
+        .await
+    }
 }
 
 pub async fn correlate_user_and_home_project(
