@@ -114,12 +114,13 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 if is_sparce {
                     let weekly_commits_log = weekly_commits_vec
                         .iter()
-                        .map(|com| com.tag_line.to_owned())
+                        .map(|com| format!("{}: {}", com.name, com.tag_line))
                         .collect::<Vec<String>>()
                         .join("\n");
 
                     commits_summaries = format!("Here is the log of weekly commits for the entire repository: {weekly_commits_log}, here is the contributor's commits details: {commits_summaries}");
                 }
+                send_message_to_channel("ik8", "ch_rep", commits_summaries.clone()).await;
                 if !commits_vec.is_empty() {
                     for com in commits_vec {
                         sleep(std::time::Duration::from_secs(2));
