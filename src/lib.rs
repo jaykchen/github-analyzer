@@ -90,7 +90,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     .join("\n");
 
                 report.push(format!("found {count} commits:\n{commits_str}"));
-                send_message_to_channel("ik8", "ch_rep", commits_str.to_string()).await;
+                // send_message_to_channel("ik8", "ch_rep", commits_str.to_string()).await;
                 let mut is_sparce = false;
                 let mut turbo = false;
                 match count {
@@ -133,7 +133,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     .join("\n");
 
                 report.push(format!("found {count} issues:\n{issues_str}"));
-                send_message_to_channel("ik8", "ch_iss", issues_str.to_string()).await;
+                // send_message_to_channel("ik8", "ch_iss", issues_str.to_string()).await;
 
                 let mut is_sparce = false;
                 let mut turbo = false;
