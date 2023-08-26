@@ -104,6 +104,8 @@ pub async fn process_issues(
             }
             Some((summary, gm)) => {
                 issues_summaries.push_str(&format!("{} {}\n", gm.date, summary));
+                slack_flows::send_message_to_channel("ik8", "ch_iss", gm.date.to_string()).await;
+
                 git_memory_vec.push(gm);
                 if git_memory_vec.len() > 25 {
                     break;
@@ -435,6 +437,7 @@ pub async fn process_commits(
                     break;
                 }
                 commits_summaries.push_str(&format!("{} {}\n", commit_obj.date, summary));
+                slack_flows::send_message_to_channel("ik8", "ch_rep", commit_obj.date.to_string()).await;
 
                 processed_count += 1;
             }
