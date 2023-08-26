@@ -105,7 +105,7 @@ pub async fn process_issues(
             Some((summary, gm)) => {
                 issues_summaries.push_str(&format!("{} {}\n", gm.date, summary));
                 git_memory_vec.push(gm);
-                if git_memory_vec.len() > 16 {
+                if git_memory_vec.len() > 50 {
                     break;
                 }
             }
@@ -433,10 +433,11 @@ pub async fn process_commits(
             Some(summary) => {
                 commit_obj.payload = summary;
 
-                if commits_summaries.len() <= 45_000 {
-                    commits_summaries
-                        .push_str(&format!("{} {}\n", commit_obj.date, commit_obj.payload));
+                if commits_summaries.len() > 24_000 {
+                    break;
                 }
+                commits_summaries
+                    .push_str(&format!("{} {}\n", commit_obj.date, commit_obj.payload));
 
                 processed_count += 1;
             }
