@@ -431,10 +431,13 @@ pub async fn analyze_commit_integrated(
                 }
             }
 
+            // let sys_prompt_1 = &format!(
+            //     "Given a commit patch from the user {user_name}, you are to analyze its content. Focus on the core essence of the changes without delving into granular technical specifics. Particularly, identify the purpose of the changes, the files impacted, and the broader implications for the project. Remember to strike a balance between brevity and capturing the essential details."
+            // );
             let sys_prompt_1 = &format!(
-                "Given a commit patch from the user {user_name}, you are to analyze its content. Focus on the core essence of the changes without delving into granular technical specifics. Particularly, identify the purpose of the changes, the files impacted, and the broader implications for the project. Remember to strike a balance between brevity and capturing the essential details."
+                "Given a commit patch from the user {user_name}, you are to analyze its content. Focus on the literal changes made without over-interpreting their significance. Identify the purpose of the changes as explicitly stated or implied in the commit message and the files impacted. Strive for a balanced representation, capturing essential details without overgeneralization. Keep your analysis concise."
             );
-
+            
             let mut co: ChatOptions = ChatOptions {
                 model: chat::ChatModel::GPT35Turbo,
                 system_prompt: Some(sys_prompt_1),
@@ -459,10 +462,13 @@ pub async fn analyze_commit_integrated(
                 squeeze_fit_post_texts(&stripped_texts, 12_000, 0.4)
             };
 
+            // let usr_prompt_1 = &format!(
+            //     "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, emphasizing the intent behind the modifications and their implications for the project. Ensure clarity, but avoid granular technical details. Distinguish between core code and other types of changes. Conclude with a brief evaluation of {user_name}'s contributions in this commit and its potential impact on the project. Keep your response concise and under 110 tokens."
+            // );
             let usr_prompt_1 = &format!(
-                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, emphasizing the intent behind the modifications and their implications for the project. Ensure clarity, but avoid granular technical details. Distinguish between core code and other types of changes. Conclude with a brief evaluation of {user_name}'s contributions in this commit and its potential impact on the project. Keep your response concise and under 110 tokens."
+                "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the literal changes made, differentiating between feature additions, bug fixes, and minor textual changes. Exercise caution not to over-interpret the intent or project implications. Conclude by briefly evaluating {user_name}'s contributions in this specific commit and its direct impact on the project. Keep your response under 110 tokens."
             );
-
+            
             let sha_serial = match url.rsplitn(2, "/").nth(0) {
                 Some(s) => s.chars().take(5).collect::<String>(),
                 None => "0000".to_string(),
