@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use store_flows::{get, set};
 
-#[derive(Derivative, Serialize, Deserialize, Debug)]
+#[derive(Derivative, Serialize, Deserialize, Debug, Clone)]
 pub struct GitMemory {
     pub memory_type: MemoryType,
     #[derivative(Default(value = "String::from(\"\")"))]
@@ -25,7 +25,7 @@ pub struct GitMemory {
     pub payload: String,
     pub date: NaiveDate,
 }
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MemoryType {
     Commit,
     Issue,
@@ -494,8 +494,8 @@ pub async fn get_commits_in_range(
     repo: &str,
     user_name: Option<String>,
     range: u16,
-) -> Option<(usize, Vec<GitMemory>)> {
-    #[derive(Debug, Deserialize, Serialize)]
+) -> Option<(usize, Vec<GitMemory>, Vec<GitMemory>)> {
+    #[derive(Debug, Deserialize, Serialize, Clone)]
     struct User {
         login: String,
     }
@@ -521,15 +521,11 @@ pub async fn get_commits_in_range(
         date: Option<DateTime<Utc>>,
     }
 
-    let author_str = match user_name {
-        Some(user_name) => format!("author={}", user_name),
-        None => "".to_string(),
-    };
-
     let base_commit_url =
-        format!("https://api.github.com/repos/{owner}/{repo}/commits?{author_str}&per_page=100");
+        format!("https://api.github.com/repos/{owner}/{repo}/commits?&per_page=100");
 
     let mut git_memory_vec = vec![];
+    let mut weekly_git_memory_vec = vec![];
     let now = Utc::now();
     let n_days_ago = (now - Duration::days(range as i64)).date_naive();
     match github_http_fetch(&github_token, &base_commit_url).await {
@@ -543,16 +539,29 @@ pub async fn get_commits_in_range(
             Ok(commits) => {
                 for commit in commits {
                     if let Some(commit_date) = &commit.commit.author.date {
-                        if commit_date.date_naive() > n_days_ago {
+                        if commit_date.date_naive() <= n_days_ago {
+                            continue;
+                        }
+                        weekly_git_memory_vec.push(GitMemory {
+                            memory_type: MemoryType::Commit,
+                            name: commit.author.clone().map_or(String::new(), |au| au.login),
+                            tag_line: commit.commit.message.clone(),
+                            source_url: commit.html_url.clone(),
+                            payload: String::from(""),
+                            date: commit_date.date_naive(),
+                        });
+                        if let Some(user_name) = &user_name {
                             if let Some(author) = &commit.author {
-                                git_memory_vec.push(GitMemory {
-                                    memory_type: MemoryType::Commit,
-                                    name: author.login.clone(), // clone as author.login is String type
-                                    tag_line: commit.commit.message.clone(),
-                                    source_url: commit.html_url.clone(),
-                                    payload: String::from(""),
-                                    date: commit_date.date_naive(),
-                                });
+                                if author.login.as_str() == user_name {
+                                    git_memory_vec.push(GitMemory {
+                                        memory_type: MemoryType::Commit,
+                                        name: author.login.clone(),
+                                        tag_line: commit.commit.message.clone(),
+                                        source_url: commit.html_url.clone(),
+                                        payload: String::from(""),
+                                        date: commit_date.date_naive(),
+                                    });
+                                }
                             }
                         }
                     }
@@ -560,9 +569,11 @@ pub async fn get_commits_in_range(
             }
         },
     }
-
+if user_name.is_none() {
+    git_memory_vec = weekly_git_memory_vec.clone();
+}
     let count = git_memory_vec.len();
-    Some((count, git_memory_vec))
+    Some((count, git_memory_vec, weekly_git_memory_vec))
 }
 
 pub async fn get_user_repos_in_language(

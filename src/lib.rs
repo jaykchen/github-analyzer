@@ -88,7 +88,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let mut commits_summaries = String::new();
     'commits_block: {
         match get_commits_in_range(&github_token, &owner, &repo, user_name.clone(), n_days).await {
-            Some((count, mut commits_vec)) => {
+            Some((count, mut commits_vec, weekly_commits_vec)) => {
                 let commits_str = commits_vec
                     .iter()
                     .map(|com| com.source_url.to_owned())
@@ -96,9 +96,12 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     .join("\n");
 
                 report.push(format!("found {count} commits:\n{commits_str}"));
-
+                let mut is_sparce = false;
                 if count == 0 {
                     break 'commits_block;
+                }
+                if count < 3 {
+                    is_sparce = true;
                 }
                 let turbo = if count > 4 { true } else { false };
                 match process_commits(&github_token, &mut commits_vec, turbo).await {
@@ -108,6 +111,15 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     None => log::error!("processing commits failed"),
                 }
 
+                if is_sparce {
+                    let weekly_commits_log = weekly_commits_vec
+                        .iter()
+                        .map(|com| com.tag_line.to_owned())
+                        .collect::<Vec<String>>()
+                        .join("\n");
+
+                    commits_summaries = format!("Here is the log of weekly commits for the entire repository: {weekly_commits_log}, here is the contributor's commits details: {commits_summaries}");
+                }
                 if !commits_vec.is_empty() {
                     for com in commits_vec {
                         sleep(std::time::Duration::from_secs(2));
