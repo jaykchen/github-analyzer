@@ -68,22 +68,13 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             _profile_data = format!("About {}/{}: {}", owner, repo, gm.payload);
         }
     }
-    // send_message_to_channel("ik8", "ch_pro", _profile_data.clone()).await;
 
-    // match &user_name {
-    //     Some(user_name) => {
-    //         if !is_code_contributor(&github_token, &owner, &repo, user_name).await {}
-    //     }
-    //     None => {}
-    // }
-
-    // let addressee_str = match &user_name {
-    //     Some(user_name) => format!("{}'s", user_name),
-    //     None => String::from("key community participants'"),
-    // };
-
-    // let start_msg_str =
-    //     format!("exploring {addressee_str} GitHub contributions to `{owner}/{repo}` project");
+    match &user_name {
+        Some(user_name) => {
+            if !is_code_contributor(&github_token, &owner, &repo, user_name).await {}
+        }
+        None => send_message_to_channel("ik8", "ch_pro", "no_username".to_string()).await,
+    }
 
     let mut commits_summaries = String::new();
     'commits_block: {
@@ -96,7 +87,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     .join("\n");
 
                 report.push(format!("found {count} commits:\n{commits_str}"));
-
+                send_message_to_channel("ik8", "ch_pro", commits_str.to_string()).await;
                 let mut is_sparce = false;
                 let mut turbo = false;
                 match count {
@@ -138,6 +129,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     .join("\n");
 
                 report.push(format!("found {count} issues:\n{issues_str}"));
+                send_message_to_channel("ik8", "ch_pro", issues_str.to_string()).await;
 
                 let mut is_sparce = false;
                 let mut turbo = false;
