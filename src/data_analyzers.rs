@@ -179,42 +179,27 @@ pub async fn analyze_issue_integrated(
         issue_creator_name, issue_title, labels, issue_body
     );
 
-    let mut current_page = 1;
-    loop {
-        let url_str = format!("{}/comments?&page={}", issue_url, current_page);
+    let url_str = format!("{}/comments?&per_page=100", issue_url);
 
-        match github_http_fetch(&github_token, &url_str).await {
-            Some(res) => match serde_json::from_slice::<Vec<Comment>>(res.as_slice()) {
-                Err(_e) => {
-                    log::error!(
-                        "Error parsing Vec<Comment> at page {}: {:?}",
-                        current_page,
-                        _e
-                    );
-                    break;
-                }
-                Ok(comments_obj) => {
-                    if comments_obj.is_empty() {
-                        break;
-                    }
-                    for comment in &comments_obj {
-                        let comment_body = match &comment.body {
-                            Some(body) => squeeze_fit_remove_quoted(body, "```", 300, 0.6),
-                            None => "".to_string(),
-                        };
-                        let commenter = &comment.user.login;
-                        let commenter_input = format!("{} commented: {}", commenter, comment_body);
-
-                        all_text_from_issue.push_str(&commenter_input);
-                    }
-                }
-            },
-            None => {
-                break;
+    match github_http_fetch(&github_token, &url_str).await {
+        Some(res) => match serde_json::from_slice::<Vec<Comment>>(res.as_slice()) {
+            Err(_e) => {
+                log::error!("Error parsing Vec<Comment> : {:?}", _e);
             }
-        }
+            Ok(comments_obj) => {
+                for comment in &comments_obj {
+                    let comment_body = match &comment.body {
+                        Some(body) => squeeze_fit_remove_quoted(body, "```", 300, 0.6),
+                        None => "".to_string(),
+                    };
+                    let commenter = &comment.user.login;
+                    let commenter_input = format!("{} commented: {}", commenter, comment_body);
 
-        current_page += 1;
+                    all_text_from_issue.push_str(&commenter_input);
+                }
+            }
+        },
+        None => {}
     }
 
     let target_str = target_person
@@ -224,26 +209,27 @@ pub async fn analyze_issue_integrated(
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
-    let co: ChatOptions;
+    let mut co: ChatOptions = ChatOptions {
+        model: chat::ChatModel::GPT35Turbo,
+        system_prompt: Some(sys_prompt_1),
+        restart: true,
+        temperature: Some(0.7),
+        max_tokens: Some(128),
+        ..Default::default()
+    };
     let all_text_from_issue = if turbo {
-        co = ChatOptions {
-            model: chat::ChatModel::GPT35Turbo,
-            system_prompt: Some(sys_prompt_1),
-            restart: true,
-            temperature: Some(0.7),
-            max_tokens: Some(128),
-            ..Default::default()
-        };
         squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.4)
     } else {
-        co = ChatOptions {
-            model: chat::ChatModel::GPT35Turbo16K,
-            system_prompt: Some(sys_prompt_1),
-            restart: true,
-            temperature: Some(0.7),
-            max_tokens: Some(192),
-            ..Default::default()
-        };
+        if all_text_from_issue.len() > 12_000 {
+            co = ChatOptions {
+                model: chat::ChatModel::GPT35Turbo16K,
+                system_prompt: Some(sys_prompt_1),
+                restart: true,
+                temperature: Some(0.7),
+                max_tokens: Some(192),
+                ..Default::default()
+            };
+        }
         squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.4)
     };
 
@@ -449,26 +435,27 @@ pub async fn analyze_commit_integrated(
                 "Given a commit patch from the user {user_name}, you are to analyze its content. Focus on the core essence of the changes without delving into granular technical specifics. Particularly, identify the purpose of the changes, the files impacted, and the broader implications for the project. Remember to strike a balance between brevity and capturing the essential details."
             );
 
-            let co: ChatOptions;
+            let mut co: ChatOptions = ChatOptions {
+                model: chat::ChatModel::GPT35Turbo,
+                system_prompt: Some(sys_prompt_1),
+                restart: true,
+                temperature: Some(0.7),
+                max_tokens: Some(128),
+                ..Default::default()
+            };
             let stripped_texts = if turbo {
-                co = ChatOptions {
-                    model: chat::ChatModel::GPT35Turbo,
-                    system_prompt: Some(sys_prompt_1),
-                    restart: true,
-                    temperature: Some(0.7),
-                    max_tokens: Some(128),
-                    ..Default::default()
-                };
                 squeeze_fit_post_texts(&stripped_texts, 3_000, 0.4)
             } else {
-                co = ChatOptions {
-                    model: chat::ChatModel::GPT35Turbo16K,
-                    system_prompt: Some(sys_prompt_1),
-                    restart: true,
-                    temperature: Some(0.7),
-                    max_tokens: Some(192),
-                    ..Default::default()
-                };
+                if stripped_texts.len() > 12_000 {
+                    co = ChatOptions {
+                        model: chat::ChatModel::GPT35Turbo16K,
+                        system_prompt: Some(sys_prompt_1),
+                        restart: true,
+                        temperature: Some(0.7),
+                        max_tokens: Some(192),
+                        ..Default::default()
+                    };
+                }
                 squeeze_fit_post_texts(&stripped_texts, 12_000, 0.4)
             };
 
