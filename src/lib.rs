@@ -167,8 +167,9 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 if count == 0 {
                     break 'issues_block;
                 }
+                let turbo = if count > 9 { true } else { false };
 
-                match process_issues(&github_token, issue_vec, user_name.clone()).await {
+                match process_issues(&github_token, issue_vec, user_name.clone(), turbo).await {
                     Some((summary, _, issues_vec)) => {
                         send_message_to_channel("ik8", "ch_iss", summary.clone()).await;
                         issues_summaries = summary;

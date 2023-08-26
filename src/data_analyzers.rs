@@ -88,12 +88,13 @@ pub async fn process_issues(
     github_token: &str,
     inp_vec: Vec<Issue>,
     target_person: Option<String>,
+    turbo: bool,
 ) -> Option<(String, usize, Vec<GitMemory>)> {
     let mut issues_summaries = String::new();
     let mut git_memory_vec = vec![];
 
     for issue in &inp_vec {
-        match analyze_issue_integrated(github_token, issue, target_person.clone()).await {
+        match analyze_issue_integrated(github_token, issue, target_person.clone(), turbo).await {
             None => {
                 log::error!("Error analyzing issue: {:?}", issue.url.to_string());
                 continue;
@@ -150,6 +151,7 @@ pub async fn analyze_issue_integrated(
     github_token: &str,
     issue: &Issue,
     target_person: Option<String>,
+    turbo: bool,
 ) -> Option<(String, GitMemory)> {
     let openai = OpenAIFlows::new();
 
@@ -214,7 +216,11 @@ pub async fn analyze_issue_integrated(
 
         current_page += 1;
     }
-    let all_text_from_issue = squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.4);
+    let all_text_from_issue = if turbo {
+        squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.4)
+    } else {
+        squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.4)
+    };
     let target_str = target_person
         .clone()
         .unwrap_or("key participants".to_string());
@@ -438,7 +444,9 @@ pub async fn analyze_commit_integrated(
                     inside_diff_block = false;
                 }
             }
-            let stripped_texts = if turbo {squeeze_fit_post_texts(&stripped_texts, 12_000, 0.8)} else {
+            let stripped_texts = if turbo {
+                squeeze_fit_post_texts(&stripped_texts, 12_000, 0.8)
+            } else {
                 squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
             };
 
@@ -494,9 +502,11 @@ pub async fn analyze_commit_integrated(
     }
 }
 
-
-
-pub async fn process_commits(github_token: &str, inp_vec: &mut Vec<GitMemory>, turbo: bool) -> Option<String> {
+pub async fn process_commits(
+    github_token: &str,
+    inp_vec: &mut Vec<GitMemory>,
+    turbo: bool,
+) -> Option<String> {
     let mut commits_summaries = String::new();
 
     let max_entries = 20; // Maximum entries to process
@@ -512,7 +522,7 @@ pub async fn process_commits(github_token: &str, inp_vec: &mut Vec<GitMemory>, t
             &commit_obj.name,
             &commit_obj.tag_line,
             &commit_obj.source_url,
-            turbo
+            turbo,
         )
         .await
         {
