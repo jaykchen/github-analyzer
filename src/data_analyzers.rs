@@ -218,7 +218,9 @@ pub async fn analyze_issue_integrated(
         None => log::error!("Error fetching comments for issue: {:?}", url_str),
     }
 
-    let target_str = target_person.clone().map_or("key participants".to_string(), |t| t.to_string());
+    let target_str = target_person
+        .clone()
+        .map_or("key participants".to_string(), |t| t.to_string());
 
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
@@ -304,37 +306,50 @@ pub async fn analyze_commit_integrated(
             };
 
             let text = String::from_utf8_lossy(writer.as_slice());
-
             let mut stripped_texts = String::with_capacity(text.len());
-            let mut inside_diff_block = false;
-            match is_sparce {
-                false => {
-                    for line in text.lines() {
-                        if line.starts_with("diff --git") {
-                            inside_diff_block = true;
-                            stripped_texts.push_str(line);
-                            stripped_texts.push('\n');
-                            continue;
-                        }
 
-                        if inside_diff_block {
-                            if line
-                                .chars()
-                                .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
-                            {
+            'commit_text_block: {
+                let lines_count = text.lines().count();
+                if lines_count > 600 {
+                    stripped_texts = text
+                        .splitn(2, "diff --git")
+                        .nth(0)
+                        .unwrap_or("")
+                        .to_string();
+                    break 'commit_text_block;
+                }
+
+                let mut inside_diff_block = false;
+
+                match is_sparce {
+                    false => {
+                        for line in text.lines() {
+                            if line.starts_with("diff --git") {
+                                inside_diff_block = true;
+                                stripped_texts.push_str(line);
+                                stripped_texts.push('\n');
                                 continue;
                             }
-                        }
 
-                        stripped_texts.push_str(line);
-                        stripped_texts.push('\n');
+                            if inside_diff_block {
+                                if line
+                                    .chars()
+                                    .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
+                                {
+                                    continue;
+                                }
+                            }
 
-                        if line.is_empty() {
-                            inside_diff_block = false;
+                            stripped_texts.push_str(line);
+                            stripped_texts.push('\n');
+
+                            if line.is_empty() {
+                                inside_diff_block = false;
+                            }
                         }
                     }
+                    true => stripped_texts = text.to_string(),
                 }
-                true => stripped_texts = text.to_string(),
             }
 
             let sys_prompt_1 = &format!(
