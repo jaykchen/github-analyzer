@@ -133,7 +133,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 if count == 0 {
                     break 'commits_block;
                 }
-                let turbo = if count > 9 { true } else { false };
+                let turbo = if count > 4 { true } else { false };
                 match process_commits(&github_token, &mut commits_vec, turbo).await {
                     Some(summary) => {
                         commits_summaries = summary;
@@ -167,7 +167,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 if count == 0 {
                     break 'issues_block;
                 }
-                let turbo = if count > 9 { true } else { false };
+                let turbo = if count > 4 { true } else { false };
 
                 match process_issues(&github_token, issue_vec, user_name.clone(), turbo).await {
                     Some((summary, _, issues_vec)) => {
