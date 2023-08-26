@@ -353,6 +353,7 @@ pub async fn analyze_commit_integrated(
                     true => stripped_texts = text.to_string(),
                 }
             }
+            slack_flows::send_message_to_channel("ik8", "ch_rep", stripped_texts.clone()).await;
 
             let sys_prompt_1 = &format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
