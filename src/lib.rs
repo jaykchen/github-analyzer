@@ -104,7 +104,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     is_sparce = true;
                 }
                 let turbo = if count > 4 { true } else { false };
-                match process_commits(&github_token, &mut commits_vec, turbo).await {
+                match process_commits(&github_token, &mut commits_vec, turbo, is_sparce).await {
                     Some(summary) => {
                         commits_summaries = summary;
                     }

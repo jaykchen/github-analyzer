@@ -264,116 +264,6 @@ pub async fn analyze_issue_integrated(
         }
     }
 }
-/* pub async fn analyze_issue_integrated_chain(
-    github_token: &str,
-    issue: &Issue,
-    target_person: Option<&str>,
-) -> Option<(String, GitMemory)> {
-    let issue_creator_name = &issue.user.login;
-    let issue_title = issue.title.to_string();
-    let issue_number = issue.number;
-    let issue_date = issue.created_at.date_naive();
-
-    let issue_body = match &issue.body {
-        Some(body) => squeeze_fit_remove_quoted(body, "```", 500, 0.6),
-        None => "".to_string(),
-    };
-    let issue_url = issue.url.to_string();
-
-    let labels = issue
-        .labels
-        .iter()
-        .map(|lab| lab.name.clone())
-        .collect::<Vec<String>>()
-        .join(", ");
-
-    let mut all_text_from_issue = format!(
-        "User '{}', opened an issue titled '{}', labeled '{}', with the following post: '{}'.",
-        issue_creator_name, issue_title, labels, issue_body
-    );
-
-    let mut current_page = 1;
-    loop {
-        let url_str = format!("{}/comments?&page={}", issue_url, current_page);
-
-        match github_http_fetch(&github_token, &url_str).await {
-            Some(res) => match serde_json::from_slice::<Vec<Comment>>(res.as_slice()) {
-                Err(_e) => {
-                    log::error!(
-                        "Error parsing Vec<Comment> at page {}: {:?}",
-                        current_page,
-                        _e
-                    );
-                    break;
-                }
-                Ok(comments_obj) => {
-                    if comments_obj.is_empty() {
-                        break;
-                    }
-                    for comment in &comments_obj {
-                        let comment_body = match &comment.body {
-                            Some(body) => squeeze_fit_remove_quoted(body, "```", 500, 0.6),
-                            None => "".to_string(),
-                        };
-                        let commenter = &comment.user.login;
-                        let commenter_input = format!("{} commented: {}", commenter, comment_body);
-
-                        all_text_from_issue.push_str(&commenter_input);
-                    }
-                }
-            },
-            None => {
-                break;
-            }
-        }
-
-        current_page += 1;
-    }
-    let all_text_from_issue = squeeze_fit_remove_quoted(&all_text_from_issue, "```", 6000, 0.4);
-    let target_str = target_person.unwrap_or("key participants");
-
-    let sys_prompt_1 = &format!(
-        "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to analyze the content of the issue posts. Extract key details including the main problem or question raised, the environment in which the issue occurred, any steps taken by the user and commenters to address the problem, relevant discussions, and any identified solutions, consesus reached, or pending tasks."
-    );
-    let usr_prompt_1 = &format!(
-        "Based on the GitHub issue posts: {all_text_from_issue}, please list the following key details: The main problem or question raised in the issue. The environment or conditions in which the issue occurred (e.g., hardware, OS). Any steps or actions taken by the user or commenters to address the issue. Key discussions or points of view shared by participants in the issue thread. Any solutions identified, consensus reached, or pending tasks if the issue hasn't been resolved. The role and contribution of the user or commenters in the issue."
-    );
-    let usr_prompt_2 = &format!(
-        "Provide a brief summary highlighting the core problem and emphasize the overarching contribution made by '{target_str}' to the resolution of this issue, ensuring your response stays under 128 tokens."
-    );
-
-    match chain_of_chat(
-        sys_prompt_1,
-        usr_prompt_1,
-        &format!("issue_{issue_number}"),
-        256,
-        usr_prompt_2,
-        128,
-        &format!("Error generatng issue summary #{issue_number}"),
-    )
-    .await
-    {
-        Some(issue_summary) => {
-            let mut out = format!("{issue_url} ");
-            out.push_str(&issue_summary);
-            let name = target_person.unwrap_or(&issue_creator_name).to_string();
-            let gm = GitMemory {
-                memory_type: MemoryType::Issue,
-                name: name,
-                tag_line: issue_title,
-                source_url: issue_url,
-                payload: issue_summary,
-                date: issue_date,
-            };
-
-            Some((out, gm))
-        }
-        None => {
-            log::error!("Error generating issue summary #{issue_number}");
-            None
-        }
-    }
-} */
 
 pub async fn analyze_commit_integrated(
     github_token: &str,
@@ -381,6 +271,7 @@ pub async fn analyze_commit_integrated(
     tag_line: &str,
     url: &str,
     turbo: bool,
+    is_sparce: bool,
 ) -> Option<String> {
     let openai = OpenAIFlows::new();
 
@@ -405,35 +296,36 @@ pub async fn analyze_commit_integrated(
 
             let mut stripped_texts = String::with_capacity(text.len());
             let mut inside_diff_block = false;
+            match is_sparce {
+                false => {
+                    for line in text.lines() {
+                        if line.starts_with("diff --git") {
+                            inside_diff_block = true;
+                            stripped_texts.push_str(line);
+                            stripped_texts.push('\n');
+                            continue;
+                        }
 
-            for line in text.lines() {
-                if line.starts_with("diff --git") {
-                    inside_diff_block = true;
-                    stripped_texts.push_str(line);
-                    stripped_texts.push('\n');
-                    continue;
-                }
+                        if inside_diff_block {
+                            if line
+                                .chars()
+                                .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
+                            {
+                                continue;
+                            }
+                        }
 
-                if inside_diff_block {
-                    if line
-                        .chars()
-                        .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
-                    {
-                        continue;
+                        stripped_texts.push_str(line);
+                        stripped_texts.push('\n');
+
+                        if line.is_empty() {
+                            inside_diff_block = false;
+                        }
                     }
                 }
-
-                stripped_texts.push_str(line);
-                stripped_texts.push('\n');
-
-                if line.is_empty() {
-                    inside_diff_block = false;
-                }
+                true => stripped_texts = text.to_string(),
             }
 
-            // let sys_prompt_1 = &format!(
-            //     "Given a commit patch from the user {user_name}, you are to analyze its content. Focus on the core essence of the changes without delving into granular technical specifics. Particularly, identify the purpose of the changes, the files impacted, and the broader implications for the project. Remember to strike a balance between brevity and capturing the essential details."
-            // );
             let sys_prompt_1 = &format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
             );
@@ -447,7 +339,7 @@ pub async fn analyze_commit_integrated(
                 ..Default::default()
             };
             let stripped_texts = if turbo {
-                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.4)
+                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
             } else {
                 if stripped_texts.len() > 12_000 {
                     co = ChatOptions {
@@ -455,16 +347,13 @@ pub async fn analyze_commit_integrated(
                         system_prompt: Some(sys_prompt_1),
                         restart: true,
                         temperature: Some(0.7),
-                        max_tokens: Some(192),
+                        max_tokens: Some(128),
                         ..Default::default()
                     };
                 }
-                squeeze_fit_post_texts(&stripped_texts, 12_000, 0.4)
+                squeeze_fit_post_texts(&stripped_texts, 12_000, 0.6)
             };
 
-            // let usr_prompt_1 = &format!(
-            //     "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, emphasizing the intent behind the modifications and their implications for the project. Ensure clarity, but avoid granular technical details. Distinguish between core code and other types of changes. Conclude with a brief evaluation of {user_name}'s contributions in this commit and its potential impact on the project. Keep your response concise and under 110 tokens."
-            // );
             let usr_prompt_1 = &format!(
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
             );
@@ -499,23 +388,19 @@ pub async fn process_commits(
     github_token: &str,
     inp_vec: &mut Vec<GitMemory>,
     turbo: bool,
+    is_sparce: bool,
 ) -> Option<String> {
     let mut commits_summaries = String::new();
-
-    let max_entries = 20; // Maximum entries to process
     let mut processed_count = 0; // Number of processed entries
 
     for commit_obj in inp_vec.iter_mut() {
-        if processed_count >= max_entries {
-            break;
-        }
-
         match analyze_commit_integrated(
             github_token,
             &commit_obj.name,
             &commit_obj.tag_line,
             &commit_obj.source_url,
             turbo,
+            is_sparce,
         )
         .await
         {
@@ -546,99 +431,6 @@ pub async fn process_commits(
 
     Some(commits_summaries)
 }
-
-// pub async fn process_commits(
-//     github_token: &str,
-//     inp_vec: Vec<GitMemory>,
-// ) -> Option<(String, usize, Vec<GitMemory>)> {
-//     let mut commits_summaries = String::new();
-//     let mut git_memory_vec = vec![];
-//     let mut inp_vec = inp_vec;
-//     for commit_obj in inp_vec.drain(..) {
-//         match analyze_commit(
-//             github_token,
-//             &commit_obj.name,
-//             &commit_obj.tag_line,
-//             &commit_obj.source_url,
-//         )
-//         .await
-//         {
-//             Some(summary) => {
-//                 let mut commit_obj = commit_obj; // to make it mutable
-//                 commit_obj.payload = summary;
-
-//                 if commits_summaries.len() <= 45_000 {
-//                     commits_summaries
-//                         .push_str(&format!("{} {}\n", commit_obj.date, commit_obj.payload));
-//                 }
-
-//                 git_memory_vec.push(commit_obj);
-//                 if git_memory_vec.len() > 20 {
-//                     break;
-//                 }
-//             }
-//             None => {
-//                 log::error!(
-//                     "Error analyzing commit {:?} for user {}",
-//                     commit_obj.source_url,
-//                     commit_obj.name
-//                 );
-//             }
-//         }
-//     }
-
-//     let count = git_memory_vec.len();
-//     if count == 0 {
-//         log::error!("No commits processed");
-//         return None;
-//     }
-//     Some((commits_summaries, count, git_memory_vec))
-// }
-
-/* pub async fn analyze_discussions(
-    mut discussions: Vec<GitMemory>,
-    target_person: Option<&str>,
-) -> (String, Vec<GitMemory>) {
-    let target_str = target_person.unwrap_or("key participants");
-    let sys_prompt_1 =
-        "Given the information on a GitHub discussion, your task is to analyze the content of the discussion posts. Extract key details including the main topic or question raised, any steps taken by the original author and commenters to address the problem, relevant discussions, and any identified solutions, consensus reached, or pending tasks.";
-
-    let mut text_out = "".to_string();
-    for gm in discussions.iter_mut() {
-        let usr_prompt_1 = &format!(
-            "Based on the GitHub discussion post: {}, please list the following key details: The main topic or question raised in the discussion. Any steps or actions taken by the original author or commenters to address the discussion. Key discussions or points of view shared by participants in the discussion thread. Any solutions identified, consensus reached, or pending tasks if the discussion hasn't been resolved. The role and contribution of the user or commenters in the discussion.",
-            gm.payload
-        );
-
-        let usr_prompt_2 = &format!(
-            "Provide a brief summary highlighting the core topic and emphasize the overarching contribution made by '{target_str}' to the resolution of this discussion, ensuring your response stays under 128 tokens."
-        );
-
-        let discussion_summary = chain_of_chat(
-            sys_prompt_1,
-            usr_prompt_1,
-            "discussion99",
-            256,
-            usr_prompt_2,
-            128,
-            &format!("Error generating discussion summary #{}", gm.source_url),
-        )
-        .await;
-
-        if let Some(summary) = discussion_summary {
-            let out = format!("{} {}", gm.source_url, summary);
-            text_out.push_str(&out);
-            gm.payload = out;
-            if let Some(target) = target_person {
-                gm.name = target.to_string();
-            }
-        } else {
-            log::error!("Error generating discussion summary #{}", gm.source_url);
-        }
-    }
-
-    (text_out, discussions)
-} */
 
 pub async fn correlate_commits_issues(
     _commits_summary: &str,
