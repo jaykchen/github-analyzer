@@ -216,11 +216,7 @@ pub async fn analyze_issue_integrated(
 
         current_page += 1;
     }
-    let all_text_from_issue = if turbo {
-        squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.4)
-    } else {
-        squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.4)
-    };
+
     let target_str = target_person
         .clone()
         .unwrap_or("key participants".to_string());
@@ -228,25 +224,29 @@ pub async fn analyze_issue_integrated(
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
-
-    let co = match all_text_from_issue.len() > 12000 {
-        true => ChatOptions {
-            model: chat::ChatModel::GPT35Turbo16K,
-            system_prompt: Some(sys_prompt_1),
-            restart: true,
-            temperature: Some(0.7),
-            max_tokens: Some(192),
-            ..Default::default()
-        },
-        false => ChatOptions {
+    let co: ChatOptions;
+    let all_text_from_issue = if turbo {
+        co = ChatOptions {
             model: chat::ChatModel::GPT35Turbo,
             system_prompt: Some(sys_prompt_1),
             restart: true,
             temperature: Some(0.7),
             max_tokens: Some(128),
             ..Default::default()
-        },
+        };
+        squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.4)
+    } else {
+        co = ChatOptions {
+            model: chat::ChatModel::GPT35Turbo16K,
+            system_prompt: Some(sys_prompt_1),
+            restart: true,
+            temperature: Some(0.7),
+            max_tokens: Some(192),
+            ..Default::default()
+        };
+        squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.4)
     };
+
     let usr_prompt_1 = &format!(
         "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 128 tokens."
     );
@@ -444,34 +444,34 @@ pub async fn analyze_commit_integrated(
                     inside_diff_block = false;
                 }
             }
-            let stripped_texts = if turbo {
-                squeeze_fit_post_texts(&stripped_texts, 12_000, 0.8)
-            } else {
-                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
-            };
 
             let sys_prompt_1 = &format!(
                 "Given a commit patch from the user {user_name}, you are to analyze its content. Focus on the core essence of the changes without delving into granular technical specifics. Particularly, identify the purpose of the changes, the files impacted, and the broader implications for the project. Remember to strike a balance between brevity and capturing the essential details."
             );
 
-            let co = match stripped_texts.len() > 12000 {
-                true => ChatOptions {
-                    model: chat::ChatModel::GPT35Turbo16K,
-                    system_prompt: Some(sys_prompt_1),
-                    restart: true,
-                    temperature: Some(0.7),
-                    max_tokens: Some(192),
-                    ..Default::default()
-                },
-                false => ChatOptions {
+            let co: ChatOptions;
+            let stripped_texts = if turbo {
+                co = ChatOptions {
                     model: chat::ChatModel::GPT35Turbo,
                     system_prompt: Some(sys_prompt_1),
                     restart: true,
                     temperature: Some(0.7),
                     max_tokens: Some(128),
                     ..Default::default()
-                },
+                };
+                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.4)
+            } else {
+                co = ChatOptions {
+                    model: chat::ChatModel::GPT35Turbo16K,
+                    system_prompt: Some(sys_prompt_1),
+                    restart: true,
+                    temperature: Some(0.7),
+                    max_tokens: Some(192),
+                    ..Default::default()
+                };
+                squeeze_fit_post_texts(&stripped_texts, 12_000, 0.4)
             };
+
             let usr_prompt_1 = &format!(
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, emphasizing the intent behind the modifications and their implications for the project. Ensure clarity, but avoid granular technical details. Distinguish between core code and other types of changes. Conclude with a brief evaluation of {user_name}'s contributions in this commit and its potential impact on the project. Keep your response concise and under 110 tokens."
             );
