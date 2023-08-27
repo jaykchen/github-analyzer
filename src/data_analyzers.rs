@@ -308,51 +308,56 @@ pub async fn analyze_commit_integrated(
             };
 
             let text = String::from_utf8_lossy(writer.as_slice());
-            let mut stripped_texts = String::with_capacity(text.len());
+            // let mut stripped_texts = String::with_capacity(text.len());
+            let stripped_texts = text
+                .splitn(2, "diff --git")
+                .nth(0)
+                .unwrap_or("")
+                .to_string();
 
-            'commit_text_block: {
-                let lines_count = text.lines().count();
-                if lines_count > 150 {
-                    stripped_texts = text
-                        .splitn(2, "diff --git")
-                        .nth(0)
-                        .unwrap_or("")
-                        .to_string();
-                    break 'commit_text_block;
-                }
+            // 'commit_text_block: {
+            //     let lines_count = text.lines().count();
+            //     if lines_count > 150 {
+            //         stripped_texts = text
+            //             .splitn(2, "diff --git")
+            //             .nth(0)
+            //             .unwrap_or("")
+            //             .to_string();
+            //         break 'commit_text_block;
+            //     }
 
-                let mut inside_diff_block = false;
+            //     let mut inside_diff_block = false;
 
-                match is_sparce {
-                    false => {
-                        for line in text.lines() {
-                            if line.starts_with("diff --git") {
-                                inside_diff_block = true;
-                                stripped_texts.push_str(line);
-                                stripped_texts.push('\n');
-                                continue;
-                            }
+            //     match is_sparce {
+            //         false => {
+            //             for line in text.lines() {
+            //                 if line.starts_with("diff --git") {
+            //                     inside_diff_block = true;
+            //                     stripped_texts.push_str(line);
+            //                     stripped_texts.push('\n');
+            //                     continue;
+            //                 }
 
-                            if inside_diff_block {
-                                if line
-                                    .chars()
-                                    .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
-                                {
-                                    continue;
-                                }
-                            }
+            //                 if inside_diff_block {
+            //                     if line
+            //                         .chars()
+            //                         .any(|ch| ch == '[' || ch == ']' || ch == '{' || ch == '}')
+            //                     {
+            //                         continue;
+            //                     }
+            //                 }
 
-                            stripped_texts.push_str(line);
-                            stripped_texts.push('\n');
+            //                 stripped_texts.push_str(line);
+            //                 stripped_texts.push('\n');
 
-                            if line.is_empty() {
-                                inside_diff_block = false;
-                            }
-                        }
-                    }
-                    true => stripped_texts = text.to_string(),
-                }
-            }
+            //                 if line.is_empty() {
+            //                     inside_diff_block = false;
+            //                 }
+            //             }
+            //         }
+            //         true => stripped_texts = text.to_string(),
+            //     }
+            // }
             slack_flows::send_message_to_channel("ik8", "ch_rep", stripped_texts.clone()).await;
 
             let sys_prompt_1 = &format!(
@@ -561,8 +566,6 @@ pub async fn correlate_commits_issues_discussions(
         4..=14 => (512, 192, 180),
         15.. => (1024, 384, 350),
     };
-
-
 
     let usr_prompt_2 = &format!(
         "Merge the identified impactful technical contributions and their interconnections into a coherent summary for {target_str} over the week. Describe how these contributions align with the project's technical objectives. Pinpoint recurring technical patterns or trends and shed light on the synergy between individual efforts and their collective progression. Detail both the weight of each contribution and their interconnectedness in shaping the project, please use bullet-points format in your reply. Limit to less than {gen_2_reminder} tokens."
