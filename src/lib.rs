@@ -80,47 +80,47 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     let mut issues_count = 0;
 
     let mut commits_summaries = String::new();
-    'commits_block: {
-        match get_commits_in_range(&github_token, &owner, &repo, user_name.clone(), n_days).await {
-            Some((count, mut commits_vec, weekly_commits_vec)) => {
-                let commits_str = commits_vec
-                    .iter()
-                    .map(|com| com.source_url.to_owned())
-                    .collect::<Vec<String>>()
-                    .join("\n");
+    // 'commits_block: {
+    //     match get_commits_in_range(&github_token, &owner, &repo, user_name.clone(), n_days).await {
+    //         Some((count, mut commits_vec, weekly_commits_vec)) => {
+    //             let commits_str = commits_vec
+    //                 .iter()
+    //                 .map(|com| com.source_url.to_owned())
+    //                 .collect::<Vec<String>>()
+    //                 .join("\n");
 
-                report.push(format!("found {count} commits:\n{commits_str}"));
-                // send_message_to_channel("ik8", "ch_rep", commits_str.to_string()).await;
-                let mut is_sparce = false;
-                let mut turbo = false;
-                match count {
-                    0 => break 'commits_block,
-                    1..=2 => is_sparce = true,
-                    6.. => turbo = true,
-                    _ => {}
-                };
-                commits_count = count;
-                match process_commits(&github_token, &mut commits_vec, turbo, is_sparce).await {
-                    Some(summary) => {
-                        commits_summaries = summary;
-                    }
-                    None => log::error!("processing commits failed"),
-                }
+    //             report.push(format!("found {count} commits:\n{commits_str}"));
+    //             // send_message_to_channel("ik8", "ch_rep", commits_str.to_string()).await;
+    //             let mut is_sparce = false;
+    //             let mut turbo = false;
+    //             match count {
+    //                 0 => break 'commits_block,
+    //                 1..=2 => is_sparce = true,
+    //                 6.. => turbo = true,
+    //                 _ => {}
+    //             };
+    //             commits_count = count;
+    //             match process_commits(&github_token, &mut commits_vec, turbo, is_sparce).await {
+    //                 Some(summary) => {
+    //                     commits_summaries = summary;
+    //                 }
+    //                 None => log::error!("processing commits failed"),
+    //             }
 
-                if is_sparce {
-                    let weekly_commits_log = weekly_commits_vec
-                        .iter()
-                        .map(|com| format!("{}: {}", com.name, com.tag_line))
-                        .collect::<Vec<String>>()
-                        .join("\n");
+    //             if is_sparce {
+    //                 let weekly_commits_log = weekly_commits_vec
+    //                     .iter()
+    //                     .map(|com| format!("{}: {}", com.name, com.tag_line))
+    //                     .collect::<Vec<String>>()
+    //                     .join("\n");
 
-                    commits_summaries = format!("Here is the contributor's commits details: {commits_summaries}, here is the log of weekly commits for the entire repository: {weekly_commits_log}");
-                }
-                send_message_to_channel("ik8", "ch_rep", commits_summaries.clone()).await;
-            }
-            None => log::error!("failed to get commits"),
-        }
-    }
+    //                 commits_summaries = format!("Here is the contributor's commits details: {commits_summaries}, here is the log of weekly commits for the entire repository: {weekly_commits_log}");
+    //             }
+    //             send_message_to_channel("ik8", "ch_rep", commits_summaries.clone()).await;
+    //         }
+    //         None => log::error!("failed to get commits"),
+    //     }
+    // }
     let mut issues_summaries = String::new();
 
     'issues_block: {

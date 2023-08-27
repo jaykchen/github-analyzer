@@ -104,7 +104,8 @@ pub async fn process_issues(
             }
             Some((summary, gm)) => {
                 issues_summaries.push_str(&format!("{} {}\n", gm.date, summary));
-                slack_flows::send_message_to_channel("ik8", "ch_iss", gm.date.to_string()).await;
+                slack_flows::send_message_to_channel("ik8", "ch_iss", gm.source_url.to_string())
+                    .await;
 
                 git_memory_vec.push(gm);
                 if git_memory_vec.len() > 25 {
@@ -169,6 +170,7 @@ pub async fn analyze_issue_integrated(
     let issue_body = match &issue.body {
         Some(body) => {
             if is_sparce {
+                //   let temp =      squeeze_fit_remove_quoted(body, "```", 500, 0.6);
                 squeeze_fit_remove_quoted(body, "```", 500, 0.6)
             } else {
                 squeeze_fit_remove_quoted(body, "```", 400, 0.7)
@@ -208,7 +210,7 @@ pub async fn analyze_issue_integrated(
                                 squeeze_fit_remove_quoted(body, "```", 200, 0.7)
                             }
                         }
-                        None => continue,
+                        None => String::new(),
                     };
                     let commenter = &comment.user.login;
                     let commenter_input = format!("{} commented: {}", commenter, comment_body);
@@ -235,6 +237,21 @@ pub async fn analyze_issue_integrated(
         max_tokens: Some(128),
         ..Default::default()
     };
+
+    let head = all_text_from_issue.chars().take(100).collect::<String>();
+    let tail = all_text_from_issue
+        .lines()
+        .last()
+        .unwrap_or("failed to get tail")
+        .to_string();
+
+    slack_flows::send_message_to_channel(
+        "ik8",
+        "ch_iss",
+        format!("Issue: {} {}\n{}", issue_url.to_string(), head, tail),
+    )
+    .await;
+
     let all_text_from_issue = if turbo {
         squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.4)
     } else {
@@ -358,7 +375,7 @@ pub async fn analyze_commit_integrated(
             //         true => stripped_texts = text.to_string(),
             //     }
             // }
-            slack_flows::send_message_to_channel("ik8", "ch_rep", stripped_texts.clone()).await;
+            // slack_flows::send_message_to_channel("ik8", "ch_rep", stripped_texts.clone()).await;
 
             let sys_prompt_1 = &format!(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
