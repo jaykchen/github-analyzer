@@ -403,7 +403,7 @@ pub async fn get_issue_texts(github_token: &str, issue: &Issue) -> Option<String
     let issue_creator_name = &issue.user.login;
     let issue_title = &issue.title;
     let issue_body = match &issue.body {
-        Some(body) => squeeze_fit_remove_quoted(body, "```", 500, 0.6),
+        Some(body) => squeeze_fit_remove_quoted(body, 500, 0.6),
         None => "".to_string(),
     };
     let issue_url = &issue.url.to_string();
@@ -440,7 +440,7 @@ pub async fn get_issue_texts(github_token: &str, issue: &Issue) -> Option<String
                     }
                     for comment in &comments_obj {
                         let comment_body = match &comment.body {
-                            Some(body) => squeeze_fit_remove_quoted(body, "```", 300, 0.6),
+                            Some(body) => squeeze_fit_remove_quoted(body, 300, 0.6),
                             None => "".to_string(),
                         };
                         let commenter = &comment.user.login;
@@ -1300,7 +1300,7 @@ pub async fn search_discussions_integrated(
                                 _ => "".to_string(),
                             };
                             let body_text = match discussion.body.as_ref() {
-                                Some(text) => squeeze_fit_remove_quoted(&text, "```", 500, 0.6),
+                                Some(text) => squeeze_fit_remove_quoted(&text, 500, 0.6),
                                 None => "".to_string(),
                             };
                             let mut disuccsion_texts = format!(
@@ -1316,7 +1316,7 @@ pub async fn search_discussions_integrated(
                                         if let Some(comment) = &comment_edge_option.node {
                                             let stripped_comment_text = squeeze_fit_remove_quoted(
                                                 &comment.body.as_ref().unwrap_or(&empty_str),
-                                                "```",
+                                               
                                                 300,
                                                 0.6,
                                             );

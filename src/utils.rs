@@ -56,17 +56,12 @@ pub fn squeeze_fit_commits_issues(commits: &str, issues: &str, split: f32) -> (S
     (commits_vec.join(" "), issues_vec.join(" "))
 }
 
-pub fn squeeze_fit_remove_quoted(
-    inp_str: &str,
-    quote_mark: &str,
-    max_len: u16,
-    split: f32,
-) -> String {
+pub fn squeeze_fit_remove_quoted(inp_str: &str, max_len: u16, split: f32) -> String {
     let mut body = String::new();
     let mut inside_quote = false;
 
     for line in inp_str.lines() {
-        if line.contains(quote_mark) {
+        if line.contains("```") || line.contains("\"\"\"") {
             inside_quote = !inside_quote;
             continue;
         }
@@ -87,10 +82,21 @@ pub fn squeeze_fit_remove_quoted(
     let n_take_from_beginning = (body_len as f32 * split) as usize;
     let n_keep_till_end = body_len - n_take_from_beginning;
 
+    // Range check for drain operation
+    let drain_start = if n_take_from_beginning < body_len {
+        n_take_from_beginning
+    } else {
+        body_len
+    };
+
+    let drain_end = if n_keep_till_end <= body_len {
+        body_len - n_keep_till_end
+    } else {
+        0
+    };
+
     let final_text = if body_len > max_len as usize {
         let mut body_text_vec = body_words.to_vec();
-        let drain_start = n_take_from_beginning;
-        let drain_end = body_len - n_keep_till_end;
         body_text_vec.drain(drain_start..drain_end);
         body_text_vec.join(" ")
     } else {
@@ -99,6 +105,7 @@ pub fn squeeze_fit_remove_quoted(
 
     final_text
 }
+
 pub fn squeeze_fit_post_texts(inp_str: &str, max_len: u16, split: f32) -> String {
     let bpe = tiktoken_rs::cl100k_base().unwrap();
 

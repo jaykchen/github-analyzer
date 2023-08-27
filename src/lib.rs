@@ -69,13 +69,6 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         }
     }
 
-    // match &user_name {
-    //     Some(user_name) => {
-    //         if !is_code_contributor(&github_token, &owner, &repo, user_name).await {}
-    //     }
-    //     None => send_message_to_channel("ik8", "ch_pro", "no_username".to_string()).await,
-    // }
-
     let mut commits_count = 0;
     let mut issues_count = 0;
 
@@ -155,7 +148,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 .await
                 {
                     Some((summary, _, issues_vec)) => {
-                        send_message_to_channel("ik8", "ch_iss", summary.clone()).await;
+                        send_message_to_channel("ik8", "ch_err", summary.clone()).await;
                         issues_summaries = summary;
                     }
                     None => log::error!("processing issues failed"),

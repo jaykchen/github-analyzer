@@ -170,10 +170,10 @@ pub async fn analyze_issue_integrated(
     let issue_body = match &issue.body {
         Some(body) => {
             if is_sparce {
-                //   let temp =      squeeze_fit_remove_quoted(body, "```", 500, 0.6);
-                squeeze_fit_remove_quoted(body, "```", 500, 0.6)
+                //   let temp =      squeeze_fit_remove_quoted(body, 500, 0.6);
+                squeeze_fit_remove_quoted(body, 500, 0.6)
             } else {
-                squeeze_fit_remove_quoted(body, "```", 400, 0.7)
+                squeeze_fit_remove_quoted(body, 400, 0.7)
             }
         }
         None => "".to_string(),
@@ -193,7 +193,10 @@ pub async fn analyze_issue_integrated(
         issue_creator_name, issue_title, labels, issue_body
     );
 
-    let url_str = format!("{}/comments?&per_page=100", issue_url);
+    let url_str = format!(
+        "{}/comments?&sort=updated&order=desc&per_page=100",
+        issue_url
+    );
 
     match github_http_fetch(&github_token, &url_str).await {
         Some(res) => match serde_json::from_slice::<Vec<Comment>>(res.as_slice()) {
@@ -205,9 +208,9 @@ pub async fn analyze_issue_integrated(
                     let comment_body = match &comment.body {
                         Some(body) => {
                             if is_sparce {
-                                squeeze_fit_remove_quoted(body, "```", 300, 0.6)
+                                squeeze_fit_remove_quoted(body, 300, 0.6)
                             } else {
-                                squeeze_fit_remove_quoted(body, "```", 200, 0.7)
+                                squeeze_fit_remove_quoted(body, 200, 0.7)
                             }
                         }
                         None => String::new(),
@@ -253,7 +256,7 @@ pub async fn analyze_issue_integrated(
     .await;
 
     let all_text_from_issue = if turbo {
-        squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.4)
+        squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.7)
     } else {
         if all_text_from_issue.len() > 12_000 {
             co = ChatOptions {
@@ -265,7 +268,7 @@ pub async fn analyze_issue_integrated(
                 ..Default::default()
             };
         }
-        squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.4)
+        squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.7)
     };
 
     let usr_prompt_1 = &format!(
@@ -460,8 +463,6 @@ pub async fn process_commits(
                     break;
                 }
                 commits_summaries.push_str(&format!("{} {}\n", commit_obj.date, summary));
-                slack_flows::send_message_to_channel("ik8", "ch_rep", commit_obj.date.to_string())
-                    .await;
 
                 processed_count += 1;
             }
