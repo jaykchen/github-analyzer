@@ -225,8 +225,14 @@ pub async fn analyze_issue_integrated(
                     let commenter_input = format!("{} commented: {}", commenter, comment_body);
                     let mut commenter_token = bpe.encode_ordinary(&commenter_input);
                     all_text_tokens.append(&mut commenter_token);
-                    if all_text_tokens.len() > 3000 {
-                        break;
+                    if is_sparce {
+                        if all_text_tokens.len() > 12_000 {
+                            break;
+                        }
+                    } else {
+                        if all_text_tokens.len() > 3_000 {
+                            break;
+                        }
                     }
                 }
             }
@@ -243,44 +249,25 @@ pub async fn analyze_issue_integrated(
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
-    let co: ChatOptions = ChatOptions {
-        model: chat::ChatModel::GPT35Turbo,
-        system_prompt: Some(sys_prompt_1),
-        restart: true,
-        temperature: Some(0.7),
-        max_tokens: Some(128),
-        ..Default::default()
+    let co = if is_sparce {
+        ChatOptions {
+            model: chat::ChatModel::GPT35Turbo16K,
+            system_prompt: Some(sys_prompt_1),
+            restart: true,
+            temperature: Some(0.7),
+            max_tokens: Some(128),
+            ..Default::default()
+        }
+    } else {
+        ChatOptions {
+            model: chat::ChatModel::GPT35Turbo,
+            system_prompt: Some(sys_prompt_1),
+            restart: true,
+            temperature: Some(0.7),
+            max_tokens: Some(128),
+            ..Default::default()
+        }
     };
-
-    // let head = all_text_from_issue.chars().take(100).collect::<String>();
-    // let tail = all_text_from_issue
-    //     .lines()
-    //     .last()
-    //     .unwrap_or("failed to get tail")
-    //     .to_string();
-
-    // slack_flows::send_message_to_channel(
-    //     "ik8",
-    //     "ch_iss",
-    //     format!("Issue: {} {}\n{}", issue_url.to_string(), head, tail),
-    // )
-    // .await;
-
-    // let all_text_from_issue = if turbo {
-    //     squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.7)
-    // } else {
-    //     if all_text_from_issue.len() > 12_000 {
-    //         co = ChatOptions {
-    //             model: chat::ChatModel::GPT35Turbo16K,
-    //             system_prompt: Some(sys_prompt_1),
-    //             restart: true,
-    //             temperature: Some(0.7),
-    //             max_tokens: Some(128),
-    //             ..Default::default()
-    //         };
-    //     }
-    //     squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.7)
-    // };
 
     let usr_prompt_1 = &format!(
         "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 110 tokens."
@@ -340,11 +327,6 @@ pub async fn analyze_commit_integrated(
 
             let text = String::from_utf8_lossy(writer.as_slice());
             // let mut stripped_texts = String::with_capacity(text.len());
-            let stripped_texts = text
-                .splitn(2, "diff --git")
-                .nth(0)
-                .unwrap_or("")
-                .to_string();
 
             // 'commit_text_block: {
             //     let lines_count = text.lines().count();
@@ -395,7 +377,7 @@ pub async fn analyze_commit_integrated(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
             );
 
-            let co: ChatOptions = ChatOptions {
+            let mut co: ChatOptions = ChatOptions {
                 model: chat::ChatModel::GPT35Turbo,
                 system_prompt: Some(sys_prompt_1),
                 restart: true,
@@ -403,8 +385,28 @@ pub async fn analyze_commit_integrated(
                 max_tokens: Some(128),
                 ..Default::default()
             };
-            let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
-            let stripped_texts = squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6);
+
+            let stripped_texts = if !is_sparce {
+                let stripped_texts = text
+                    .splitn(2, "diff --git")
+                    .nth(0)
+                    .unwrap_or("")
+                    .to_string();
+
+                let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
+                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
+            } else {
+                co = ChatOptions {
+                    model: chat::ChatModel::GPT35Turbo16K,
+                    system_prompt: Some(sys_prompt_1),
+                    restart: true,
+                    temperature: Some(0.7),
+                    max_tokens: Some(128),
+                    ..Default::default()
+                };
+                text.chars().take(24_000).collect::<String>()
+            };
+
             // let stripped_texts = if turbo {
             //     squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
             // } else {
