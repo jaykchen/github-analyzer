@@ -10,8 +10,8 @@ use flowsnet_platform_sdk::logger;
 use github_data_fetchers::*;
 use serde_json::Value;
 use slack_flows::send_message_to_channel;
+use std::collections::HashMap;
 use std::env;
-use std::{collections::HashMap, thread::sleep};
 use webhook_flows::{request_received, send_response};
 #[no_mangle]
 #[tokio::main(flavor = "current_thread")]
@@ -195,7 +195,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         None => log::error!("failed to get discussions"),
     }
 
-    let is_jumbo = (commits_count + issues_count) > 15;
+    let total_input_entry_count = (commits_count + issues_count) as u16;
 
     if commits_summaries.is_empty() && issues_summaries.is_empty() && discussion_data.is_empty() {
         match &user_name {
@@ -217,7 +217,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             Some(&issues_summaries),
             Some(&discussion_data),
             user_name.as_deref(),
-            is_jumbo,
+            total_input_entry_count,
         )
         .await
         {
