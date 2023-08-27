@@ -208,9 +208,9 @@ pub async fn analyze_issue_integrated(
                     let comment_body = match &comment.body {
                         Some(body) => {
                             if is_sparce {
-                                squeeze_fit_remove_quoted(body, 300, 0.6)
+                                squeeze_fit_remove_quoted(body, 300, 1.0)
                             } else {
-                                squeeze_fit_remove_quoted(body, 200, 0.7)
+                                squeeze_fit_remove_quoted(body, 200, 1.0)
                             }
                         }
                         None => String::new(),
@@ -219,6 +219,9 @@ pub async fn analyze_issue_integrated(
                     let commenter_input = format!("{} commented: {}", commenter, comment_body);
 
                     all_text_from_issue.push_str(&commenter_input);
+                    if all_text_from_issue.len() > 18_000 {
+                        break;
+                    }
                 }
             }
         },
@@ -241,19 +244,19 @@ pub async fn analyze_issue_integrated(
         ..Default::default()
     };
 
-    let head = all_text_from_issue.chars().take(100).collect::<String>();
-    let tail = all_text_from_issue
-        .lines()
-        .last()
-        .unwrap_or("failed to get tail")
-        .to_string();
+    // let head = all_text_from_issue.chars().take(100).collect::<String>();
+    // let tail = all_text_from_issue
+    //     .lines()
+    //     .last()
+    //     .unwrap_or("failed to get tail")
+    //     .to_string();
 
-    slack_flows::send_message_to_channel(
-        "ik8",
-        "ch_iss",
-        format!("Issue: {} {}\n{}", issue_url.to_string(), head, tail),
-    )
-    .await;
+    // slack_flows::send_message_to_channel(
+    //     "ik8",
+    //     "ch_iss",
+    //     format!("Issue: {} {}\n{}", issue_url.to_string(), head, tail),
+    // )
+    // .await;
 
     let all_text_from_issue = if turbo {
         squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.7)
