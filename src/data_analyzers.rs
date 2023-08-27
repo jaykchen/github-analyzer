@@ -108,7 +108,7 @@ pub async fn process_issues(
                     .await;
 
                 git_memory_vec.push(gm);
-                if git_memory_vec.len() > 25 {
+                if git_memory_vec.len() > 20 {
                     break;
                 }
             }
@@ -243,7 +243,7 @@ pub async fn analyze_issue_integrated(
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
-    let  co: ChatOptions = ChatOptions {
+    let co: ChatOptions = ChatOptions {
         model: chat::ChatModel::GPT35Turbo,
         system_prompt: Some(sys_prompt_1),
         restart: true,
@@ -395,7 +395,7 @@ pub async fn analyze_commit_integrated(
                 "Given a commit patch from user {user_name}, analyze its content. Focus on changes that substantively alter code or functionality. A good analysis prioritizes the commit message for clues on intent and refrains from overstating the impact of minor changes. Aim to provide a balanced, fact-based representation that distinguishes between major and minor contributions to the project. Keep your analysis concise."
             );
 
-            let mut co: ChatOptions = ChatOptions {
+            let co: ChatOptions = ChatOptions {
                 model: chat::ChatModel::GPT35Turbo,
                 system_prompt: Some(sys_prompt_1),
                 restart: true,
@@ -403,21 +403,23 @@ pub async fn analyze_commit_integrated(
                 max_tokens: Some(128),
                 ..Default::default()
             };
-            let stripped_texts = if turbo {
-                squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
-            } else {
-                if stripped_texts.len() > 12_000 {
-                    co = ChatOptions {
-                        model: chat::ChatModel::GPT35Turbo16K,
-                        system_prompt: Some(sys_prompt_1),
-                        restart: true,
-                        temperature: Some(0.7),
-                        max_tokens: Some(128),
-                        ..Default::default()
-                    };
-                }
-                squeeze_fit_post_texts(&stripped_texts, 12_000, 0.6)
-            };
+            let stripped_texts = squeeze_fit_remove_quoted(&stripped_texts, 5_000, 1.0);
+            let stripped_texts = squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6);
+            // let stripped_texts = if turbo {
+            //     squeeze_fit_post_texts(&stripped_texts, 3_000, 0.6)
+            // } else {
+            //     if stripped_texts.len() > 12_000 {
+            //         co = ChatOptions {
+            //             model: chat::ChatModel::GPT35Turbo16K,
+            //             system_prompt: Some(sys_prompt_1),
+            //             restart: true,
+            //             temperature: Some(0.7),
+            //             max_tokens: Some(128),
+            //             ..Default::default()
+            //         };
+            //     }
+            //     squeeze_fit_post_texts(&stripped_texts, 12_000, 0.6)
+            // };
 
             let usr_prompt_1 = &format!(
                 "Analyze the commit patch: {stripped_texts}, and its description: {tag_line}. Summarize the main changes, but only emphasize modifications that directly affect core functionality. A good summary is fact-based, derived primarily from the commit message, and avoids over-interpretation. It recognizes the difference between minor textual changes and substantial code adjustments. Conclude by evaluating the realistic impact of {user_name}'s contributions in this commit on the project. Limit the response to 110 tokens."
@@ -432,8 +434,7 @@ pub async fn analyze_commit_integrated(
                 .await
             {
                 Ok(r) => {
-                    let mut out = format!("{} ", url);
-                    out.push_str(&r.choice);
+                    let out = format!("{} {}", url, r.choice);
                     Some(out)
                 }
                 Err(_e) => {
@@ -470,7 +471,8 @@ pub async fn process_commits(
         .await
         {
             Some(summary) => {
-                if commits_summaries.len() > 12_000 {
+                let len = commits_summaries.split_whitespace().count();
+                if len > 3000 {
                     break;
                 }
                 commits_summaries.push_str(&format!("{} {}\n", commit_obj.date, summary));
