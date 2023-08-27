@@ -161,6 +161,7 @@ pub async fn analyze_issue_integrated(
     is_sparce: bool,
 ) -> Option<(String, GitMemory)> {
     let openai = OpenAIFlows::new();
+    let bpe = tiktoken_rs::cl100k_base().unwrap();
 
     let issue_creator_name = &issue.user.login;
     let issue_title = issue.title.to_string();
@@ -169,12 +170,14 @@ pub async fn analyze_issue_integrated(
 
     let issue_body = match &issue.body {
         Some(body) => {
-            if is_sparce {
-                //   let temp =      squeeze_fit_remove_quoted(body, 500, 0.6);
-                squeeze_fit_remove_quoted(body, 500, 0.6)
-            } else {
-                squeeze_fit_remove_quoted(body, 400, 0.7)
-            }
+            squeeze_fit_remove_quoted(body, 400, 0.7)
+
+            // if is_sparce {
+            //     //   let temp =      squeeze_fit_remove_quoted(body, 500, 0.6);
+            //     squeeze_fit_remove_quoted(body, 500, 0.6)
+            // } else {
+            //     squeeze_fit_remove_quoted(body, 400, 0.7)
+            // }
         }
         None => "".to_string(),
     };
@@ -188,10 +191,11 @@ pub async fn analyze_issue_integrated(
         .collect::<Vec<String>>()
         .join(", ");
 
-    let mut all_text_from_issue = format!(
+    let all_text_from_issue = format!(
         "User '{}', opened an issue titled '{}', labeled '{}', with the following post: '{}'.",
         issue_creator_name, issue_title, labels, issue_body
     );
+    let mut all_text_tokens = bpe.encode_ordinary(&all_text_from_issue);
 
     let url_str = format!(
         "{}/comments?&sort=updated&order=desc&per_page=100",
@@ -207,19 +211,21 @@ pub async fn analyze_issue_integrated(
                 for comment in &comments_obj {
                     let comment_body = match &comment.body {
                         Some(body) => {
-                            if is_sparce {
-                                squeeze_fit_remove_quoted(body, 300, 1.0)
-                            } else {
-                                squeeze_fit_remove_quoted(body, 200, 1.0)
-                            }
+                            squeeze_fit_remove_quoted(body, 200, 1.0)
+
+                            // if is_sparce {
+                            //     squeeze_fit_remove_quoted(body, 300, 1.0)
+                            // } else {
+                            //     squeeze_fit_remove_quoted(body, 200, 1.0)
+                            // }
                         }
                         None => String::new(),
                     };
                     let commenter = &comment.user.login;
                     let commenter_input = format!("{} commented: {}", commenter, comment_body);
-
-                    all_text_from_issue.push_str(&commenter_input);
-                    if all_text_from_issue.len() > 18_000 {
+                    let mut commenter_token = bpe.encode_ordinary(&commenter_input);
+                    all_text_tokens.append(&mut commenter_token);
+                    if all_text_tokens.len() > 3000 {
                         break;
                     }
                 }
@@ -228,6 +234,8 @@ pub async fn analyze_issue_integrated(
         None => log::error!("Error fetching comments for issue: {:?}", url_str),
     }
 
+    let all_text_from_issue = bpe.decode(all_text_tokens).ok().unwrap_or(String::new());
+
     let target_str = target_person
         .clone()
         .map_or("key participants".to_string(), |t| t.to_string());
@@ -235,7 +243,7 @@ pub async fn analyze_issue_integrated(
     let sys_prompt_1 = &format!(
         "Given the information that user '{issue_creator_name}' opened an issue titled '{issue_title}', your task is to deeply analyze the content of the issue posts. Distill the crux of the issue, the potential solutions suggested, and evaluate the significant contributions of the participants in resolving or progressing the discussion."
     );
-    let mut co: ChatOptions = ChatOptions {
+    let  co: ChatOptions = ChatOptions {
         model: chat::ChatModel::GPT35Turbo,
         system_prompt: Some(sys_prompt_1),
         restart: true,
@@ -258,21 +266,21 @@ pub async fn analyze_issue_integrated(
     // )
     // .await;
 
-    let all_text_from_issue = if turbo {
-        squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.7)
-    } else {
-        if all_text_from_issue.len() > 12_000 {
-            co = ChatOptions {
-                model: chat::ChatModel::GPT35Turbo16K,
-                system_prompt: Some(sys_prompt_1),
-                restart: true,
-                temperature: Some(0.7),
-                max_tokens: Some(128),
-                ..Default::default()
-            };
-        }
-        squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.7)
-    };
+    // let all_text_from_issue = if turbo {
+    //     squeeze_fit_post_texts(&all_text_from_issue, 3_000, 0.7)
+    // } else {
+    //     if all_text_from_issue.len() > 12_000 {
+    //         co = ChatOptions {
+    //             model: chat::ChatModel::GPT35Turbo16K,
+    //             system_prompt: Some(sys_prompt_1),
+    //             restart: true,
+    //             temperature: Some(0.7),
+    //             max_tokens: Some(128),
+    //             ..Default::default()
+    //         };
+    //     }
+    //     squeeze_fit_post_texts(&all_text_from_issue, 12_000, 0.7)
+    // };
 
     let usr_prompt_1 = &format!(
         "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 110 tokens."
