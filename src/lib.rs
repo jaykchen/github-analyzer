@@ -109,7 +109,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
                     commits_summaries = format!("Here is the contributor's commits details: {commits_summaries}, here is the log of weekly commits for the entire repository: {weekly_commits_log}");
                 }
-                send_message_to_channel("ik8", "ch_rep", commits_summaries.clone()).await;
+                // send_message_to_channel("ik8", "ch_rep", commits_summaries.clone()).await;
             }
             None => log::error!("failed to get commits"),
         }
@@ -148,7 +148,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 .await
                 {
                     Some((summary, _, issues_vec)) => {
-                        send_message_to_channel("ik8", "ch_err", summary.clone()).await;
+                        // send_message_to_channel("ik8", "ch_err", summary.clone()).await;
                         issues_summaries = summary;
                     }
                     None => log::error!("processing issues failed"),
@@ -185,7 +185,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
             // send_message_to_channel("ik8", "ch_dis", summary.clone()).await;
             discussion_data = summary;
         }
-        None => log::error!("failed to get discussions"),
+        None => log::error!("failed to get discussions for {owner}/{repo}"),
     }
 
     let total_input_entry_count = (commits_count + issues_count) as u16;
@@ -224,11 +224,11 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
     }
 
     let output = report.join("\n");
-    send_message_to_channel("ik8", "general", output.clone()).await;
-
+    
     send_response(
         200,
         vec![(String::from("content-type"), String::from("text/plain"))],
         output.as_bytes().to_vec(),
     );
+    send_message_to_channel("ik8", "ch_err", output.clone()).await;
 }

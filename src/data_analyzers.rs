@@ -104,8 +104,8 @@ pub async fn process_issues(
             }
             Some((summary, gm)) => {
                 issues_summaries.push_str(&format!("{} {}\n", gm.date, summary));
-                slack_flows::send_message_to_channel("ik8", "ch_iss", gm.source_url.to_string())
-                    .await;
+                // slack_flows::send_message_to_channel("ik8", "ch_iss", gm.source_url.to_string())
+                //     .await;
 
                 git_memory_vec.push(gm);
                 if git_memory_vec.len() > 20 {
@@ -593,13 +593,21 @@ pub async fn correlate_commits_issues_discussions(
     );
 
     let (gen_1_size, gen_2_size, gen_2_reminder) = match total_input_entry_count {
-        0..=3 => (384, 96, 80),
-        4..=14 => (512, 192, 180),
-        15.. => (1024, 384, 350),
+        0..=3 => (384, 96, 96),
+        4..=14 => (512, 192, 192),
+        15.. => (1024, 384, 384),
     };
 
+    // let usr_prompt_2 = &format!(
+    //     "Merge the identified impactful technical contributions and their interconnections into a coherent summary for {target_str} over the week. Describe how these contributions align with the project's technical objectives. Pinpoint recurring technical patterns or trends and shed light on the synergy between individual efforts and their collective progression. Detail both the weight of each contribution and their interconnectedness in shaping the project, please use bullet-points format in your reply. Limit to less than {gen_2_reminder} tokens."
+    // );
     let usr_prompt_2 = &format!(
-        "Merge the identified impactful technical contributions and their interconnections into a coherent summary for {target_str} over the week. Describe how these contributions align with the project's technical objectives. Pinpoint recurring technical patterns or trends and shed light on the synergy between individual efforts and their collective progression. Detail both the weight of each contribution and their interconnectedness in shaping the project, please use bullet-points format in your reply. Limit to less than {gen_2_reminder} tokens."
+        "If applicable, summarize the key technical contributions made by {target_str} this week in bullet-point format. Address the following points within a token limit of {gen_2_reminder}. If no information is available for a point, leave it blank:
+        - Highlight impactful contributions and their interconnections.
+        - Explain alignment with the project's goals.
+        - Identify recurring patterns or trends.
+        - Discuss synergy between individual and collective advancement.
+        - Comment objectively on the significance of each contribution."
     );
 
     chain_of_chat(
