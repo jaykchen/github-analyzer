@@ -95,8 +95,14 @@ pub async fn process_issues(
     let mut git_memory_vec = vec![];
 
     for issue in &inp_vec {
-        match analyze_issue_integrated(github_token, issue, target_person.clone(), _turbo, is_sparce)
-            .await
+        match analyze_issue_integrated(
+            github_token,
+            issue,
+            target_person.clone(),
+            _turbo,
+            is_sparce,
+        )
+        .await
         {
             None => {
                 log::error!("Error analyzing issue: {:?}", issue.url.to_string());
@@ -570,23 +576,39 @@ pub async fn correlate_commits_issues_discussions(
     );
 
     let (gen_1_size, gen_2_size, gen_2_reminder) = match total_input_entry_count {
-        0..=3 => (384, 96, 96),
-        4..=14 => (512, 192, 192),
-        15.. => (1024, 384, 384),
+        0..=3 => (384, 96, 250),
+        4..=14 => (512, 350, 350),
+        15.. => (1024, 500, 500),
     };
 
     // let usr_prompt_2 = &format!(
     //     "Merge the identified impactful technical contributions and their interconnections into a coherent summary for {target_str} over the week. Describe how these contributions align with the project's technical objectives. Pinpoint recurring technical patterns or trends and shed light on the synergy between individual efforts and their collective progression. Detail both the weight of each contribution and their interconnectedness in shaping the project, please use bullet-points format in your reply. Limit to less than {gen_2_reminder} tokens."
     // );
+    // let usr_prompt_2 = &format!(
+    //     "If applicable, summarize the key technical contributions made by {target_str} this week in bullet-point format. Address the following points within a token limit of {gen_2_reminder}. If no information is available for a point, leave it blank:
+    //     - Highlight impactful contributions and their interconnections.
+    //     - Explain alignment with the project's goals.
+    //     - Identify recurring patterns or trends.
+    //     - Discuss synergy between individual and collective advancement.
+    //     - Comment objectively on the significance of each contribution."
+    // );
     let usr_prompt_2 = &format!(
-        "If applicable, summarize the key technical contributions made by {target_str} this week in bullet-point format. Address the following points within a token limit of {gen_2_reminder}. If no information is available for a point, leave it blank:
+        r#"Analyze the key technical contributions made by {target_str} this week. Consider the following points and express the information in JSON format. If no information is available for a point, leave it blank.
         - Highlight impactful contributions and their interconnections.
         - Explain alignment with the project's goals.
         - Identify recurring patterns or trends.
         - Discuss synergy between individual and collective advancement.
-        - Comment objectively on the significance of each contribution."
+        - Comment objectively on the significance of each contribution. 
+        ```
+        {{
+          "impactful": "",
+          "alignment": "",
+          "patterns": "",
+          "synergy": "",
+          "significance": ""
+        }}
+        ```"#,
     );
-
     chain_of_chat(
         sys_prompt_1,
         usr_prompt_1,
@@ -640,24 +662,4 @@ pub async fn correlate_user_and_home_project(
     .await
 }
 
-/*
-//user prompt to gpt generation of json output
-let usr_prompt_1 = &format!(
-    "Analyze the GitHub issue content: {}. \
-    Concentrate on the principal arguments, suggested solutions, and areas of consensus or \
-    disagreement among the participants. \
-    From these elements, generate a concise summary of the entire issue to inform the next course of action. \
-    Please reply in the following JSON format. If no information is available for a field, leave that field empty. \
-    If information is available, summarize it as a single, complete sentence covering one or multiple facts: \n\n\
-    ```\n\
-    {{\n\
-      \"principal_arguments\": \"\",\n\
-      \"suggested_solutions\": \"\",\n\
-      \"areas_of_consensus\": \"\",\n\
-      \"areas_of_disagreement\": \"\",\n\
-      \"concise_summary\": \"\"\n\
-    }}\n\
-    ```",
-    all_text_from_issue
-);
-*/
+

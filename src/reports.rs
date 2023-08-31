@@ -1,5 +1,6 @@
 use crate::data_analyzers::*;
 use crate::github_data_fetchers::*;
+use crate::utils::parse_summary_from_raw_json;
 use chrono::{Duration, Utc};
 use log;
 use webhook_flows::send_response;
@@ -188,7 +189,8 @@ pub async fn weekly_report(
                 report = vec!["no report generated".to_string()];
             }
             Some(final_summary) => {
-                report.push(final_summary);
+                let clean_summary = parse_summary_from_raw_json(&final_summary);
+                report.push(clean_summary);
             }
         }
     }

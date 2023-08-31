@@ -362,24 +362,94 @@ pub fn custom_json_parser(input: &str) -> Option<String> {
 }
 
 
-/*
-//user prompt to gpt generation of json output
-let usr_prompt_1 = &format!(
-    "Analyze the GitHub issue content: {}. \
-    Concentrate on the principal arguments, suggested solutions, and areas of consensus or \
-    disagreement among the participants. \
-    From these elements, generate a concise summary of the entire issue to inform the next course of action. \
-    Please reply in the following JSON format. If no information is available for a field, leave that field empty. \
-    If information is available, summarize it as a single, complete sentence covering one or multiple facts: \n\n\
-    ```\n\
-    {{\n\
-      \"principal_arguments\": \"\",\n\
-      \"suggested_solutions\": \"\",\n\
-      \"areas_of_consensus\": \"\",\n\
-      \"areas_of_disagreement\": \"\",\n\
-      \"concise_summary\": \"\"\n\
-    }}\n\
-    ```",
-    all_text_from_issue
-);
-*/
+
+
+pub fn parse_summary_from_raw_json(input: &str) -> String {
+    #[derive(Debug, Deserialize)]
+    struct GitHubIssueSummary {
+        impactful: Option<String>,
+        alignment: Option<String>,
+        patterns: Option<String>,
+        synergy: Option<String>,
+        significance: Option<String>,
+    }
+
+    let mut parsed_data: std::collections::HashMap<String, serde_json::Value> =
+        std::collections::HashMap::new();
+
+    let lines: Vec<&str> = input.lines().collect();
+    for line in lines {
+        if line.trim().starts_with("\"") {
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() >= 2 {
+                let key = parts[0].trim_matches(|c| c == '"' || c == ' ');
+                let value: String = parts[1..].join(":");
+
+                if value.len() >= 15 {
+                    // Ignore if data is less than 15 characters
+                    if let Ok(json_value) = serde_json::from_str(&value) {
+                        parsed_data.insert(key.to_string(), json_value);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut summary = GitHubIssueSummary {
+        impactful: None,
+        alignment: None,
+        patterns: None,
+        synergy: None,
+        significance: None,
+    };
+
+    if let Some(val) = parsed_data.get("impactful") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.impactful = Some(converted);
+        }
+    }
+
+    if let Some(val) = parsed_data.get("alignment") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.alignment = Some(converted);
+        }
+    }
+
+    if let Some(val) = parsed_data.get("patterns") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.patterns = Some(converted);
+        }
+    }
+
+    if let Some(val) = parsed_data.get("synergy") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.synergy = Some(converted);
+        }
+    }
+
+    if let Some(val) = parsed_data.get("significance") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.significance = Some(converted);
+        }
+    }
+
+    let mut result = String::new();
+    if let Some(val) = summary.impactful {
+        result += &val;
+    }
+    if let Some(val) = summary.alignment {
+        result += &val;
+    }
+    if let Some(val) = summary.patterns {
+        result += &val;
+    }
+    if let Some(val) = summary.synergy {
+        result += &val;
+    }
+    if let Some(val) = summary.significance {
+        result += &val;
+    }
+
+    result
+}
+
