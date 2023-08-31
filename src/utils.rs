@@ -365,6 +365,7 @@ pub fn custom_json_parser(input: &str) -> Option<String> {
 
 
 pub fn parse_summary_from_raw_json(input: &str) -> String {
+
     #[derive(Debug, Deserialize)]
     struct GitHubIssueSummary {
         impactful: Option<String>,
@@ -374,82 +375,64 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
         significance: Option<String>,
     }
 
-    let mut parsed_data: std::collections::HashMap<String, serde_json::Value> =
-        std::collections::HashMap::new();
+    let start = input.find('{').unwrap_or(0);
+    let end = input.rfind('}').unwrap_or_else(|| input.len());
 
-    let lines: Vec<&str> = input.lines().collect();
-    for line in lines {
-        if line.trim().starts_with("\"") {
-            let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() >= 2 {
-                let key = parts[0].trim_matches(|c| c == '"' || c == ' ');
-                let value: String = parts[1..].join(":");
+    let json_str = &input[start..end];
 
-                if value.len() >= 15 {
-                    // Ignore if data is less than 15 characters
-                    if let Ok(json_value) = serde_json::from_str(&value) {
-                        parsed_data.insert(key.to_string(), json_value);
-                    }
-                }
+    let mut parsed_data: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
+    let mut current_key: Option<String> = None;
+    let mut current_value: String = String::new();
+    
+    for line in json_str.lines() {
+        let trimmed_line = line.trim();
+        
+        // Skip if the line doesn't start with a quote (it's not a key or value)
+        if !trimmed_line.starts_with('"') {
+            continue;
+        }
+        
+        // If we're in the middle of a value, append the line to the current value
+        if current_key.is_some() {
+            current_value.push_str(trimmed_line);
+            
+            // If the line ends with a quote, we've reached the end of the value
+            if trimmed_line.ends_with('"') {
+                parsed_data.insert(current_key.take().unwrap(), Value::String(current_value.clone()));
+                current_value.clear();
+            }
+            continue;
+        }
+
+        let parts: Vec<&str> = trimmed_line.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            let key = parts[0].trim_matches(|c| c == '"' || c == ' ');
+            
+            // If the value part ends with a quote, it's a single-line value
+            if parts[1].trim().ends_with('"') {
+                let value = parts[1].trim_matches(|c| c == '"' || c == ' ');
+                parsed_data.insert(key.to_string(), Value::String(value.to_string()));
+            } else {
+                // Otherwise, it's a multi-line value and we need to keep track of it
+                current_key = Some(key.to_string());
+                current_value.push_str(parts[1].trim());
             }
         }
     }
 
-    let mut summary = GitHubIssueSummary {
-        impactful: None,
-        alignment: None,
-        patterns: None,
-        synergy: None,
-        significance: None,
+    let summary = GitHubIssueSummary {
+        impactful: parsed_data.get("impactful").and_then(|val| val.as_str().map(|s| s.to_string())),
+        alignment: parsed_data.get("alignment").and_then(|val| val.as_str().map(|s| s.to_string())),
+        patterns: parsed_data.get("patterns").and_then(|val| val.as_str().map(|s| s.to_string())),
+        synergy: parsed_data.get("synergy").and_then(|val| val.as_str().map(|s| s.to_string())),
+        significance: parsed_data.get("significance").and_then(|val| val.as_str().map(|s| s.to_string())),
     };
 
-    if let Some(val) = parsed_data.get("impactful") {
-        if let Ok(converted) = serde_json::from_value(val.clone()) {
-            summary.impactful = Some(converted);
-        }
-    }
-
-    if let Some(val) = parsed_data.get("alignment") {
-        if let Ok(converted) = serde_json::from_value(val.clone()) {
-            summary.alignment = Some(converted);
-        }
-    }
-
-    if let Some(val) = parsed_data.get("patterns") {
-        if let Ok(converted) = serde_json::from_value(val.clone()) {
-            summary.patterns = Some(converted);
-        }
-    }
-
-    if let Some(val) = parsed_data.get("synergy") {
-        if let Ok(converted) = serde_json::from_value(val.clone()) {
-            summary.synergy = Some(converted);
-        }
-    }
-
-    if let Some(val) = parsed_data.get("significance") {
-        if let Ok(converted) = serde_json::from_value(val.clone()) {
-            summary.significance = Some(converted);
-        }
-    }
-
-    let mut result = String::new();
-    if let Some(val) = summary.impactful {
-        result += &val;
-    }
-    if let Some(val) = summary.alignment {
-        result += &val;
-    }
-    if let Some(val) = summary.patterns {
-        result += &val;
-    }
-    if let Some(val) = summary.synergy {
-        result += &val;
-    }
-    if let Some(val) = summary.significance {
-        result += &val;
-    }
-
-    result
+    format!("{}, {}, {}, {}, {}",
+        summary.impactful.as_deref().unwrap_or(""),
+        summary.alignment.as_deref().unwrap_or(""),
+        summary.patterns.as_deref().unwrap_or(""),
+        summary.synergy.as_deref().unwrap_or(""),
+        summary.significance.as_deref().unwrap_or("")
+    )
 }
-
