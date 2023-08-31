@@ -371,54 +371,60 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
         significance: Option<String>,
     }
 
+    let input = input.replace("\n", ""); // remove newline characters
     let start = input.find('{').unwrap_or(0);
     let end = input.rfind('}').unwrap_or_else(|| input.len());
 
-    let json_str = &input[start..end];
+    let json_str = &input[start..=end];
 
     let mut parsed_data: std::collections::HashMap<String, Value> =
         std::collections::HashMap::new();
     let mut current_key: Option<String> = None;
     let mut current_value: String = String::new();
 
-    for line in json_str.lines() {
-        let trimmed_line = line.trim();
+    let mut json_str = json_str.chars().peekable();
 
-        if !trimmed_line.starts_with('"') {
+    while let Some(ch) = json_str.next() {
+        let trimmed_ch = ch.to_string();
+        let trimmed_ch = trimmed_ch.trim();
+
+        if !trimmed_ch.starts_with('"') {
             continue;
         }
 
         if let Some(key) = current_key.clone() {
-            current_value.push_str(trimmed_line);
+            current_value.push(ch);
 
-            if trimmed_line.ends_with('"') {
-                parsed_data.insert(
-                    key,
-                    Value::String(current_value.clone()),
-                );
-                current_value.clear();
-                current_key = None;
+            if let Some(ch) = json_str.peek() {
+                if *ch == '"' {
+                    json_str.next();
+                    parsed_data.insert(
+                        key,
+                        Value::String(current_value.clone()),
+                    );
+                    current_value.clear();
+                    current_key = None;
+                }
             }
             continue;
         }
 
-        let parts: Vec<&str> = trimmed_line.splitn(2, ':').collect();
-        if parts.len() == 2 {
-            let key = parts[0].trim_matches(|c| c == '"' || c == ' ');
+        let key: String = json_str.by_ref().take_while(|&ch| ch != ':').collect();
+        let key = key.trim_matches(|c| c == '"' || c == ' ');
 
-            match key {
-                "impactful" | "alignment" | "patterns" | "synergy" | "significance" => {
-                    if parts[1].trim().ends_with('"') {
-                        let value = parts[1].trim_matches(|c| c == '"' || c == ' ');
-                        parsed_data.insert(key.to_string(), Value::String(value.to_string()));
-                    } else {
-                        current_key = Some(key.to_string());
-                        current_value.push_str(parts[1].trim());
-                    }
-                },
-                _ => continue,
-            }
+        match key {
+            "impactful" | "alignment" | "patterns" | "synergy" | "significance" => {
+                let value: String = json_str.by_ref().take_while(|&ch| ch != ',').collect();
+                let value = value.trim_matches(|c| c == '"' || c == ' ');
+                parsed_data.insert(key.to_string(), Value::String(value.to_string()));
+            },
+            _ => continue,
         }
+    }
+
+    // add the last key-value pair if the value doesn't have an ending quote
+    if let Some(key) = current_key {
+        parsed_data.insert(key, Value::String(current_value));
     }
 
     let summary = GitHubIssueSummary {
