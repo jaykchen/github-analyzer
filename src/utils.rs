@@ -4,10 +4,10 @@ use openai_flows::{
     chat::{ChatModel, ChatOptions},
     OpenAIFlows,
 };
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashSet;
 use store_flows::{get, set};
-
 /*
 use crypto::{symmetriccipher, buffer, aes, blockmodes};
 use crypto::buffer::{ReadBuffer, WriteBuffer, BufferResult};
@@ -36,25 +36,6 @@ fn get_vals(hex_key: &str) -> (String, String) {
 
 
  */
-
-pub fn squeeze_fit_commits_issues(commits: &str, issues: &str, split: f32) -> (String, String) {
-    let mut commits_vec = commits.split_whitespace().collect::<Vec<&str>>();
-    let commits_len = commits_vec.len();
-    let mut issues_vec = issues.split_whitespace().collect::<Vec<&str>>();
-    let issues_len = issues_vec.len();
-
-    if commits_len + issues_len > 44_000 {
-        let commits_to_take = (44_000 as f32 * split) as usize;
-        match commits_len > commits_to_take {
-            true => commits_vec.truncate(commits_to_take),
-            false => {
-                let issues_to_take = 44_000 - commits_len;
-                issues_vec.truncate(issues_to_take);
-            }
-        }
-    }
-    (commits_vec.join(" "), issues_vec.join(" "))
-}
 
 pub fn squeeze_fit_remove_quoted(inp_str: &str, max_len: u16, split: f32) -> String {
     let mut body = String::new();
@@ -307,3 +288,98 @@ pub async fn save_user(owner: &str, repo: &str, user_name: &str) -> bool {
     // If the user_name was added, return true; otherwise, return false
     !already_exists
 }
+
+pub fn custom_json_parser(input: &str) -> Option<String> {
+    #[derive(Debug, Deserialize)]
+    struct GitHubIssueSummary {
+        principal_arguments: Option<Vec<String>>,
+        suggested_solutions: Option<Vec<String>>,
+        areas_of_consensus: Option<Vec<String>>,
+        areas_of_disagreement: Option<Vec<String>>,
+        concise_summary: Option<String>,
+    }
+
+    let mut parsed_data: std::collections::HashMap<String, serde_json::Value> =
+        std::collections::HashMap::new();
+
+    let lines: Vec<&str> = input.lines().collect();
+    for line in lines {
+        if line.trim().starts_with("\"") {
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() >= 2 {
+                let key = parts[0].trim_matches(|c| c == '"' || c == ' ');
+                let value: String = parts[1..].join(":");
+
+                if value.len() >= 15 {
+                    // Ignore if data is less than 15 characters
+                    if let Ok(json_value) = serde_json::from_str(&value) {
+                        parsed_data.insert(key.to_string(), json_value);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut summary = GitHubIssueSummary {
+        principal_arguments: None,
+        suggested_solutions: None,
+        areas_of_consensus: None,
+        areas_of_disagreement: None,
+        concise_summary: None,
+    };
+
+    if let Some(val) = parsed_data.get("principal_arguments") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.principal_arguments = Some(converted);
+        }
+    }
+
+    if let Some(val) = parsed_data.get("suggested_solutions") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.suggested_solutions = Some(converted);
+        }
+    }
+
+    if let Some(val) = parsed_data.get("areas_of_consensus") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.areas_of_consensus = Some(converted);
+        }
+    }
+
+    if let Some(val) = parsed_data.get("areas_of_disagreement") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.areas_of_disagreement = Some(converted);
+        }
+    }
+
+    if let Some(val) = parsed_data.get("concise_summary") {
+        if let Ok(converted) = serde_json::from_value(val.clone()) {
+            summary.concise_summary = Some(converted);
+        }
+    }
+
+    Some(summary.concise_summary.unwrap_or("".to_string()))
+}
+
+
+/*
+//user prompt to gpt generation of json output
+let usr_prompt_1 = &format!(
+    "Analyze the GitHub issue content: {}. \
+    Concentrate on the principal arguments, suggested solutions, and areas of consensus or \
+    disagreement among the participants. \
+    From these elements, generate a concise summary of the entire issue to inform the next course of action. \
+    Please reply in the following JSON format. If no information is available for a field, leave that field empty. \
+    If information is available, summarize it as a single, complete sentence covering one or multiple facts: \n\n\
+    ```\n\
+    {{\n\
+      \"principal_arguments\": \"\",\n\
+      \"suggested_solutions\": \"\",\n\
+      \"areas_of_consensus\": \"\",\n\
+      \"areas_of_disagreement\": \"\",\n\
+      \"concise_summary\": \"\"\n\
+    }}\n\
+    ```",
+    all_text_from_issue
+);
+*/

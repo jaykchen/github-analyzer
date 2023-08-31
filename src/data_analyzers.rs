@@ -22,7 +22,7 @@ pub async fn is_valid_owner_repo_integrated(
         readme: Option<String>,
         updated_at: Option<DateTime<Utc>>,
     }
-    let openai = OpenAIFlows::new();
+    let _openai = OpenAIFlows::new();
 
     let community_profile_url = format!(
         "https://api.github.com/repos/{}/{}/community/profile",
@@ -88,14 +88,14 @@ pub async fn process_issues(
     github_token: &str,
     inp_vec: Vec<Issue>,
     target_person: Option<String>,
-    turbo: bool,
+    _turbo: bool,
     is_sparce: bool,
 ) -> Option<(String, usize, Vec<GitMemory>)> {
     let mut issues_summaries = String::new();
     let mut git_memory_vec = vec![];
 
     for issue in &inp_vec {
-        match analyze_issue_integrated(github_token, issue, target_person.clone(), turbo, is_sparce)
+        match analyze_issue_integrated(github_token, issue, target_person.clone(), _turbo, is_sparce)
             .await
         {
             None => {
@@ -123,7 +123,7 @@ pub async fn process_issues(
     Some((issues_summaries, count, git_memory_vec))
 }
 pub async fn analyze_readme(content: &str) -> Option<String> {
-    let openai = OpenAIFlows::new();
+    let _openai = OpenAIFlows::new();
 
     let sys_prompt_1 = &format!(
         "Your task is to objectively analyze a GitHub profile and the README of their project. Focus on extracting factual information about the features of the project, and its stated objectives. Avoid making judgments or inferring subjective value."
@@ -137,11 +137,17 @@ pub async fn analyze_readme(content: &str) -> Option<String> {
         max_tokens: Some(256),
         ..Default::default()
     };
+
+    let content = if content.len() > 48_000 {
+        squeeze_fit_remove_quoted(&content, 9_000, 0.7)
+    } else {
+        content.to_string()
+    };
     let usr_prompt_1 = &format!(
         "Based on the profile and README provided: {content}, extract a concise summary detailing this project's factual significance in its domain, their areas of expertise, and the main features and goals of the project. Ensure the insights are objective and under 110 tokens."
     );
 
-    match openai
+    match _openai
         .chat_completion(&format!("profile-99"), usr_prompt_1, &co)
         .await
     {
@@ -157,10 +163,10 @@ pub async fn analyze_issue_integrated(
     github_token: &str,
     issue: &Issue,
     target_person: Option<String>,
-    turbo: bool,
+    _turbo: bool,
     is_sparce: bool,
 ) -> Option<(String, GitMemory)> {
-    let openai = OpenAIFlows::new();
+    let _openai = OpenAIFlows::new();
     let bpe = tiktoken_rs::cl100k_base().unwrap();
 
     let issue_creator_name = &issue.user.login;
@@ -273,7 +279,7 @@ pub async fn analyze_issue_integrated(
         "Analyze the GitHub issue content: {all_text_from_issue}. Provide a concise analysis touching upon: The central problem discussed in the issue. The main solutions proposed or agreed upon. Emphasize the role and significance of '{target_str}' in contributing towards the resolution or progression of the discussion. Aim for a succinct, analytical summary that stays under 110 tokens."
     );
 
-    match openai
+    match _openai
         .chat_completion(&format!("issue_{issue_number}"), usr_prompt_1, &co)
         .await
     {
@@ -303,10 +309,10 @@ pub async fn analyze_commit_integrated(
     user_name: &str,
     tag_line: &str,
     url: &str,
-    turbo: bool,
+    _turbo: bool,
     is_sparce: bool,
 ) -> Option<String> {
-    let openai = OpenAIFlows::new();
+    let _openai = OpenAIFlows::new();
 
     let commit_patch_str = format!("{url}.patch");
     let uri = http_req::uri::Uri::try_from(commit_patch_str.as_str())
@@ -431,7 +437,7 @@ pub async fn analyze_commit_integrated(
                 Some(s) => s.chars().take(5).collect::<String>(),
                 None => "0000".to_string(),
             };
-            match openai
+            match _openai
                 .chat_completion(&format!("commit-{sha_serial}"), usr_prompt_1, &co)
                 .await
             {
@@ -455,7 +461,7 @@ pub async fn analyze_commit_integrated(
 pub async fn process_commits(
     github_token: &str,
     inp_vec: &mut Vec<GitMemory>,
-    turbo: bool,
+    _turbo: bool,
     is_sparce: bool,
 ) -> Option<String> {
     let mut commits_summaries = String::new();
@@ -467,7 +473,7 @@ pub async fn process_commits(
             &commit_obj.name,
             &commit_obj.tag_line,
             &commit_obj.source_url,
-            turbo,
+            _turbo,
             is_sparce,
         )
         .await
@@ -497,37 +503,6 @@ pub async fn process_commits(
     }
 
     Some(commits_summaries)
-}
-
-pub async fn correlate_commits_issues(
-    _commits_summary: &str,
-    _issues_summary: &str,
-) -> Option<String> {
-    let (commits_summary, issues_summary) =
-        squeeze_fit_commits_issues(_commits_summary, _issues_summary, 0.6);
-
-    let sys_prompt_1 = &format!(
-        "Your task is to identify the 1-3 most impactful contributions by a specific user, based on the given commit logs and issue records. Pay close attention to any sequential relationships between issues and commits, and consider how they reflect the user's growth and evolution within the project. Use this data to evaluate the user's overall influence on the project's development. Provide a concise summary in bullet-point format."
-    );
-
-    let usr_prompt_1 = &format!(
-        "Given the commit logs: {commits_summary} and issue records: {issues_summary}, identify the most significant contributions made by the user. Look for patterns and sequences of events that indicate the user's growth and how they approached problem-solving. Consider major code changes, and initiatives that had substantial impact on the project. Additionally, note any instances where the resolution of an issue led to a specific commit."
-    );
-
-    let usr_prompt_2 = &format!(
-        "Based on the contributions identified, create a concise bullet-point summary. Highlight the user's key contributions and their influence on the project. Pay attention to their growth over time, and how their responses to issues evolved. Make sure to reference any interconnected events between issues and commits. Avoid replicating phrases from the source data and focus on providing a unique and insightful narrative. Please ensure your answer stayed below 256 tokens."
-    );
-
-    chain_of_chat(
-        sys_prompt_1,
-        usr_prompt_1,
-        "correlate-99",
-        512,
-        usr_prompt_2,
-        256,
-        "correlate_commits_issues",
-    )
-    .await
 }
 
 pub async fn correlate_commits_issues_discussions(
@@ -664,3 +639,25 @@ pub async fn correlate_user_and_home_project(
     )
     .await
 }
+
+/*
+//user prompt to gpt generation of json output
+let usr_prompt_1 = &format!(
+    "Analyze the GitHub issue content: {}. \
+    Concentrate on the principal arguments, suggested solutions, and areas of consensus or \
+    disagreement among the participants. \
+    From these elements, generate a concise summary of the entire issue to inform the next course of action. \
+    Please reply in the following JSON format. If no information is available for a field, leave that field empty. \
+    If information is available, summarize it as a single, complete sentence covering one or multiple facts: \n\n\
+    ```\n\
+    {{\n\
+      \"principal_arguments\": \"\",\n\
+      \"suggested_solutions\": \"\",\n\
+      \"areas_of_consensus\": \"\",\n\
+      \"areas_of_disagreement\": \"\",\n\
+      \"concise_summary\": \"\"\n\
+    }}\n\
+    ```",
+    all_text_from_issue
+);
+*/
