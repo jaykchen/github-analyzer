@@ -361,11 +361,7 @@ pub fn custom_json_parser(input: &str) -> Option<String> {
     Some(summary.concise_summary.unwrap_or("".to_string()))
 }
 
-
-
-
 pub fn parse_summary_from_raw_json(input: &str) -> String {
-
     #[derive(Debug, Deserialize)]
     struct GitHubIssueSummary {
         impactful: Option<String>,
@@ -380,25 +376,28 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
 
     let json_str = &input[start..end];
 
-    let mut parsed_data: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
+    let mut parsed_data: std::collections::HashMap<String, Value> =
+        std::collections::HashMap::new();
     let mut current_key: Option<String> = None;
     let mut current_value: String = String::new();
-    
+
+    let valid_fields = vec!["impactful", "alignment", "patterns", "synergy", "significance"]; // Add field names here
+
     for line in json_str.lines() {
         let trimmed_line = line.trim();
-        
-        // Skip if the line doesn't start with a quote (it's not a key or value)
+
         if !trimmed_line.starts_with('"') {
             continue;
         }
-        
-        // If we're in the middle of a value, append the line to the current value
+
         if current_key.is_some() {
             current_value.push_str(trimmed_line);
-            
-            // If the line ends with a quote, we've reached the end of the value
+
             if trimmed_line.ends_with('"') {
-                parsed_data.insert(current_key.take().unwrap(), Value::String(current_value.clone()));
+                parsed_data.insert(
+                    current_key.take().unwrap(),
+                    Value::String(current_value.clone()),
+                );
                 current_value.clear();
             }
             continue;
@@ -407,13 +406,16 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
         let parts: Vec<&str> = trimmed_line.splitn(2, ':').collect();
         if parts.len() == 2 {
             let key = parts[0].trim_matches(|c| c == '"' || c == ' ');
-            
-            // If the value part ends with a quote, it's a single-line value
+
+            // Check if key is one of the valid fields
+            if !valid_fields.contains(&key) {
+                continue;
+            }
+
             if parts[1].trim().ends_with('"') {
                 let value = parts[1].trim_matches(|c| c == '"' || c == ' ');
                 parsed_data.insert(key.to_string(), Value::String(value.to_string()));
             } else {
-                // Otherwise, it's a multi-line value and we need to keep track of it
                 current_key = Some(key.to_string());
                 current_value.push_str(parts[1].trim());
             }
@@ -421,14 +423,25 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
     }
 
     let summary = GitHubIssueSummary {
-        impactful: parsed_data.get("impactful").and_then(|val| val.as_str().map(|s| s.to_string())),
-        alignment: parsed_data.get("alignment").and_then(|val| val.as_str().map(|s| s.to_string())),
-        patterns: parsed_data.get("patterns").and_then(|val| val.as_str().map(|s| s.to_string())),
-        synergy: parsed_data.get("synergy").and_then(|val| val.as_str().map(|s| s.to_string())),
-        significance: parsed_data.get("significance").and_then(|val| val.as_str().map(|s| s.to_string())),
+        impactful: parsed_data
+            .get("impactful")
+            .and_then(|val| val.as_str().map(|s| s.to_string())),
+        alignment: parsed_data
+            .get("alignment")
+            .and_then(|val| val.as_str().map(|s| s.to_string())),
+        patterns: parsed_data
+            .get("patterns")
+            .and_then(|val| val.as_str().map(|s| s.to_string())),
+        synergy: parsed_data
+            .get("synergy")
+            .and_then(|val| val.as_str().map(|s| s.to_string())),
+        significance: parsed_data
+            .get("significance")
+            .and_then(|val| val.as_str().map(|s| s.to_string())),
     };
 
-    format!("{}, {}, {}, {}, {}",
+    format!(
+        "{}\n{}\n{}\n{}\n{}",
         summary.impactful.as_deref().unwrap_or(""),
         summary.alignment.as_deref().unwrap_or(""),
         summary.patterns.as_deref().unwrap_or(""),
