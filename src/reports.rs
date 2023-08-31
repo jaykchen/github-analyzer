@@ -189,6 +189,8 @@ pub async fn weekly_report(
                 report = vec!["no report generated".to_string()];
             }
             Some(final_summary) => {
+               slack_flows::send_message_to_channel("ik8", "ch_err", format!("{:?}", final_summary)).await;
+
                 let clean_summary = parse_summary_from_raw_json(&final_summary);
                 report.push(clean_summary);
             }

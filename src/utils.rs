@@ -361,96 +361,32 @@ pub fn custom_json_parser(input: &str) -> Option<String> {
     Some(summary.concise_summary.unwrap_or("".to_string()))
 }
 
+
 pub fn parse_summary_from_raw_json(input: &str) -> String {
-    #[derive(Debug, Deserialize)]
-    struct GitHubIssueSummary {
-        impactful: Option<String>,
-        alignment: Option<String>,
-        patterns: Option<String>,
-        synergy: Option<String>,
-        significance: Option<String>,
-    }
+    let keys = ["impactful", "alignment", "patterns", "synergy", "significance"];
+    let mut output = String::new();
 
-    let input = input.replace("\n", ""); // remove newline characters
-    let start = input.find('{').unwrap_or(0);
-    let end = input.rfind('}').unwrap_or_else(|| input.len());
-
-    let json_str = &input[start..=end];
-
-    let mut parsed_data: std::collections::HashMap<String, Value> =
-        std::collections::HashMap::new();
-    let mut current_key: Option<String> = None;
-    let mut current_value: String = String::new();
-
-    let mut json_str = json_str.chars().peekable();
-
-    while let Some(ch) = json_str.next() {
-        let trimmed_ch = ch.to_string();
-        let trimmed_ch = trimmed_ch.trim();
-
-        if !trimmed_ch.starts_with('"') {
-            continue;
-        }
-
-        if let Some(key) = current_key.clone() {
-            current_value.push(ch);
-
-            if let Some(ch) = json_str.peek() {
-                if *ch == '"' {
-                    json_str.next();
-                    parsed_data.insert(
-                        key,
-                        Value::String(current_value.clone()),
-                    );
-                    current_value.clear();
-                    current_key = None;
+    for i in 0..keys.len() {
+        let key_string = format!("\"{}\":", keys[i]);
+        if let Some(start) = input.find(&key_string) {
+            let value_start = start + key_string.len();
+            let value_end = if i < keys.len() - 1 {
+                let next_key = format!("\"{}\":", keys[i+1]);
+                match input[value_start..].find(&next_key) {
+                    Some(end) => end,
+                    None => input.len() - value_start,
                 }
+            } else {
+                input.len() - value_start
+            };
+            let value = &input[value_start..value_start + value_end].trim().trim_matches('"');
+            if value.len() >= 15 {
+                output += "- ";
+                output += value;
+                output += "\n";
             }
-            continue;
-        }
-
-        let key: String = json_str.by_ref().take_while(|&ch| ch != ':').collect();
-        let key = key.trim_matches(|c| c == '"' || c == ' ');
-
-        match key {
-            "impactful" | "alignment" | "patterns" | "synergy" | "significance" => {
-                let value: String = json_str.by_ref().take_while(|&ch| ch != ',').collect();
-                let value = value.trim_matches(|c| c == '"' || c == ' ');
-                parsed_data.insert(key.to_string(), Value::String(value.to_string()));
-            },
-            _ => continue,
         }
     }
 
-    // add the last key-value pair if the value doesn't have an ending quote
-    if let Some(key) = current_key {
-        parsed_data.insert(key, Value::String(current_value));
-    }
-
-    let summary = GitHubIssueSummary {
-        impactful: parsed_data
-            .get("impactful")
-            .and_then(|val| val.as_str().map(|s| s.to_string())),
-        alignment: parsed_data
-            .get("alignment")
-            .and_then(|val| val.as_str().map(|s| s.to_string())),
-        patterns: parsed_data
-            .get("patterns")
-            .and_then(|val| val.as_str().map(|s| s.to_string())),
-        synergy: parsed_data
-            .get("synergy")
-            .and_then(|val| val.as_str().map(|s| s.to_string())),
-        significance: parsed_data
-            .get("significance")
-            .and_then(|val| val.as_str().map(|s| s.to_string())),
-    };
-
-    format!(
-        "- {}\n- {}\n- {}\n- {}\n- {}",
-        summary.impactful.as_deref().unwrap_or(""),
-        summary.alignment.as_deref().unwrap_or(""),
-        summary.patterns.as_deref().unwrap_or(""),
-        summary.synergy.as_deref().unwrap_or(""),
-        summary.significance.as_deref().unwrap_or("")
-    )
+    output.trim_end().to_string()
 }
