@@ -381,8 +381,6 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
     let mut current_key: Option<String> = None;
     let mut current_value: String = String::new();
 
-    let valid_fields = vec!["impactful", "alignment", "patterns", "synergy", "significance"]; // Add field names here
-
     for line in json_str.lines() {
         let trimmed_line = line.trim();
 
@@ -390,15 +388,16 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
             continue;
         }
 
-        if current_key.is_some() {
+        if let Some(key) = current_key.clone() {
             current_value.push_str(trimmed_line);
 
             if trimmed_line.ends_with('"') {
                 parsed_data.insert(
-                    current_key.take().unwrap(),
+                    key,
                     Value::String(current_value.clone()),
                 );
                 current_value.clear();
+                current_key = None;
             }
             continue;
         }
@@ -407,17 +406,17 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
         if parts.len() == 2 {
             let key = parts[0].trim_matches(|c| c == '"' || c == ' ');
 
-            // Check if key is one of the valid fields
-            if !valid_fields.contains(&key) {
-                continue;
-            }
-
-            if parts[1].trim().ends_with('"') {
-                let value = parts[1].trim_matches(|c| c == '"' || c == ' ');
-                parsed_data.insert(key.to_string(), Value::String(value.to_string()));
-            } else {
-                current_key = Some(key.to_string());
-                current_value.push_str(parts[1].trim());
+            match key {
+                "impactful" | "alignment" | "patterns" | "synergy" | "significance" => {
+                    if parts[1].trim().ends_with('"') {
+                        let value = parts[1].trim_matches(|c| c == '"' || c == ' ');
+                        parsed_data.insert(key.to_string(), Value::String(value.to_string()));
+                    } else {
+                        current_key = Some(key.to_string());
+                        current_value.push_str(parts[1].trim());
+                    }
+                },
+                _ => continue,
             }
         }
     }
@@ -441,7 +440,7 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
     };
 
     format!(
-        "{}\n{}\n{}\n{}\n{}",
+        "- {}\n- {}\n- {}\n- {}\n- {}",
         summary.impactful.as_deref().unwrap_or(""),
         summary.alignment.as_deref().unwrap_or(""),
         summary.patterns.as_deref().unwrap_or(""),
