@@ -374,8 +374,8 @@ pub async fn get_readme_owner_repo(github_token: &str, about_repo: &str) -> Opti
             match serde_json::from_slice::<GithubReadme>(&res) {
                 Ok(readme) => {
                     if let Some(c) = readme.content {
-                        let cleaned_content = c.replace("\n", "");
-                        match base64::decode(&cleaned_content) {
+                        // let cleaned_content = c.replace("\n", "");
+                        match base64::decode(&c) {
                             Ok(decoded_content) => match String::from_utf8(decoded_content) {
                                 Ok(out) => {
                                     return Some(format!("Readme: {}", out));
