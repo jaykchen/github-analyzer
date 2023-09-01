@@ -1,3 +1,5 @@
+use std::ascii::AsciiExt;
+
 use crate::octocrab_compat::{Comment, Issue, Repository, User};
 use crate::utils::*;
 use chrono::{DateTime, Duration, NaiveDate, Utc};
@@ -365,35 +367,43 @@ pub async fn get_readme_owner_repo(github_token: &str, about_repo: &str) -> Opti
     let readme_url = format!("https://api.github.com/repos/{about_repo}/readme");
 
     match github_http_fetch(&github_token, &readme_url).await {
-        Some(res) => match serde_json::from_slice::<GithubReadme>(&res) {
-            Ok(readme) => {
-                if let Some(c) = readme.content {
-                    let cleaned_content = c.replace("\n", "");
-                    match base64::decode(&cleaned_content) {
-                        Ok(decoded_content) => match String::from_utf8(decoded_content) {
-                            Ok(out) => {
-                                return Some(format!("Readme: {}", out));
-                            }
+        Some(res) => {
+            let text = String::from_utf8(res.clone()).unwrap_or_default();  // Fixed this line
+            slack_flows::send_message_to_channel("ik8", "ch_pro", text).await;
+    
+            match serde_json::from_slice::<GithubReadme>(&res) {
+                Ok(readme) => {
+                    if let Some(c) = readme.content {
+                        let cleaned_content = c.replace("\n", "");
+                        match base64::decode(&cleaned_content) {
+                            Ok(decoded_content) => match String::from_utf8(decoded_content) {
+                                Ok(out) => {
+                                    return Some(format!("Readme: {}", out));
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "Failed to convert cleaned readme to String: {:?}",
+                                        e
+                                    );
+                                    return None;
+                                }
+                            },
                             Err(e) => {
-                                log::error!("Failed to convert cleaned readme to String: {:?}", e);
-                                return None;
+                                log::error!("Error decoding base64 content: {:?}", e);
+                                None
                             }
-                        },
-                        Err(e) => {
-                            log::error!("Error decoding base64 content: {:?}", e);
-                            None
                         }
+                    } else {
+                        log::error!("Content field in readme is null.");
+                        None
                     }
-                } else {
-                    log::error!("Content field in readme is null.");
+                }
+                Err(e) => {
+                    log::error!("Error parsing Readme: {:?}", e);
                     None
                 }
             }
-            Err(e) => {
-                log::error!("Error parsing Readme: {:?}", e);
-                None
-            }
-        },
+        }
         None => {
             log::error!("Github readme not found.");
             None
