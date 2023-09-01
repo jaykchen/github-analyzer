@@ -380,9 +380,12 @@ pub fn parse_summary_from_raw_json(input: &str) -> String {
                 input.len() - value_start
             };
             let value = &input[value_start..value_start + value_end].trim().trim_matches('"');
+            let value = value.replace("\n", " ");
+            let value = value.replace('{', "").trim();
+            let value = value.replace('}', "").trim();
             if value.len() >= 15 {
                 output += "- ";
-                output += value;
+                output += &value;
                 output += "\n";
             }
         }
