@@ -10,6 +10,66 @@ use openai_flows::{
 };
 use serde::Deserialize;
 
+pub async fn get_repo_info(github_token: &str, about_repo: &str) -> Option<String> {
+    #[derive(Deserialize)]
+    struct CommunityProfile {
+        health_percentage: u16,
+        description: Option<String>,
+        readme: Option<String>,
+        updated_at: Option<DateTime<Utc>>,
+    }
+    let _openai = OpenAIFlows::new();
+
+    let community_profile_url = format!(
+        "https://api.github.com/repos/{}/community/profile",
+        about_repo
+    );
+
+    let mut description = String::new();
+    let mut date = Utc::now().date_naive();
+    match github_http_fetch(&github_token, &community_profile_url).await {
+        Some(res) => match serde_json::from_slice::<CommunityProfile>(&res) {
+            Ok(profile) => {
+                description = profile
+                    .description
+                    .as_ref()
+                    .unwrap_or(&String::from(""))
+                    .to_string();
+                date = profile
+                    .updated_at
+                    .as_ref()
+                    .unwrap_or(&Utc::now())
+                    .date_naive();
+            }
+            Err(e) => log::error!("Error parsing Community Profile: {:?}", e),
+        },
+        None => log::error!(
+            "Error fetching Community Profile: {:?}",
+            community_profile_url
+        ),
+    }
+
+    let mut payload = String::new();
+    match get_readme_owner_repo(github_token, about_repo).await {
+        Some(content) => {
+            let content = content.chars().take(20000).collect::<String>();
+            match analyze_readme(&content).await {
+                Some(summary) => payload = summary,
+                None => log::error!("Error parsing README.md: {}", about_repo),
+            }
+        }
+        None => log::error!("Error fetching README.md: {}", about_repo),
+    };
+    if description.is_empty() && payload.is_empty() {
+        return None;
+    }
+
+    if payload.is_empty() {
+        return Some(description);
+    } else {
+        return Some(payload);
+    }
+}
 pub async fn is_valid_owner_repo_integrated(
     github_token: &str,
     owner: &str,
@@ -661,5 +721,3 @@ pub async fn correlate_user_and_home_project(
     )
     .await
 }
-
-

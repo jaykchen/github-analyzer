@@ -356,6 +356,50 @@ pub async fn get_readme(github_token: &str, owner: &str, repo: &str) -> Option<S
         }
     }
 }
+pub async fn get_readme_owner_repo(github_token: &str, about_repo: &str) -> Option<String> {
+    #[derive(Deserialize, Debug)]
+    struct GithubReadme {
+        content: Option<String>,
+    }
+
+    let readme_url = format!("https://api.github.com/repos/{about_repo}/readme");
+
+    match github_http_fetch(&github_token, &readme_url).await {
+        Some(res) => match serde_json::from_slice::<GithubReadme>(&res) {
+            Ok(readme) => {
+                if let Some(c) = readme.content {
+                    let cleaned_content = c.replace("\n", "");
+                    match base64::decode(&cleaned_content) {
+                        Ok(decoded_content) => match String::from_utf8(decoded_content) {
+                            Ok(out) => {
+                                return Some(format!("Readme: {}", out));
+                            }
+                            Err(e) => {
+                                log::error!("Failed to convert cleaned readme to String: {:?}", e);
+                                return None;
+                            }
+                        },
+                        Err(e) => {
+                            log::error!("Error decoding base64 content: {:?}", e);
+                            None
+                        }
+                    }
+                } else {
+                    log::error!("Content field in readme is null.");
+                    None
+                }
+            }
+            Err(e) => {
+                log::error!("Error parsing Readme: {:?}", e);
+                None
+            }
+        },
+        None => {
+            log::error!("Github readme not found.");
+            None
+        }
+    }
+}
 pub async fn get_issues_in_range(
     github_token: &str,
     owner: &str,
@@ -1316,7 +1360,6 @@ pub async fn search_discussions_integrated(
                                         if let Some(comment) = &comment_edge_option.node {
                                             let stripped_comment_text = squeeze_fit_remove_quoted(
                                                 &comment.body.as_ref().unwrap_or(&empty_str),
-                                               
                                                 300,
                                                 0.6,
                                             );

@@ -3,6 +3,7 @@ pub mod github_data_fetchers;
 pub mod octocrab_compat;
 pub mod reports;
 pub mod utils;
+use data_analyzers::get_repo_info;
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::get_user_data_by_login;
@@ -42,6 +43,35 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                 vec![(String::from("content-type"), String::from("text/plain"))],
                 "failed to find user with such login.".as_bytes().to_vec(),
             ),
+        }
+        return;
+    }
+    let about_repo = _qry
+        .get("about_repo")
+        .unwrap_or(&Value::Null)
+        .as_str()
+        .map(|n| n.to_string());
+
+    if let Some(about_repo) = about_repo {
+        match get_repo_info(&github_token, &about_repo).await {
+            None => {
+                send_response(
+                    400,
+                    vec![(String::from("content-type"), String::from("text/plain"))],
+                    "You've entered invalid owner/repo, or the target is private. Please try again."
+                        .as_bytes()
+                        .to_vec(),
+                );
+                std::process::exit(1);
+            }
+            Some(summary) => {
+                let _profile_data = format!("About {}: {}", about_repo, summary);
+                send_response(
+                    200,
+                    vec![(String::from("content-type"), String::from("text/plain"))],
+                    _profile_data.as_bytes().to_vec(),
+                )
+            }
         }
         return;
     }
