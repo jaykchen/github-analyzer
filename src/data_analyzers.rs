@@ -95,7 +95,7 @@ pub async fn get_repo_overview_by_scraper(
         system_prompt: Some(sys_prompt),
         restart: true,
         temperature: Some(0.7),
-        max_tokens: Some(256),
+        max_tokens: Some(700),
         ..Default::default()
     };
 
