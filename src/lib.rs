@@ -3,7 +3,7 @@ pub mod github_data_fetchers;
 pub mod octocrab_compat;
 pub mod reports;
 pub mod utils;
-use data_analyzers::{get_repo_info, get_repo_overview_by_scraper};
+use data_analyzers::{get_repo_info, get_repo_overview_by_scraper, search_bing};
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::get_user_data_by_login;
@@ -24,6 +24,7 @@ pub async fn run() {
 
 async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, _body: Vec<u8>) {
     let github_token = env::var("github_token").expect("github_token was not present in env");
+    let Ocp_Apim_Subscription_Key = env::var("bing_key").expect("bing key was not present in env");
 
     let user_login = _qry
         .get("login")
@@ -33,11 +34,17 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
 
     if user_login.is_some() {
         match get_user_data_by_login(&github_token, &user_login.unwrap()).await {
-            Some(pro) => send_response(
-                200,
-                vec![(String::from("content-type"), String::from("text/plain"))],
-                pro.as_bytes().to_vec(),
-            ),
+            Some(pro) => {
+                let query = "github user whose username:`Michael Yuan` login:juntao";
+
+                let search_data = search_bing(&Ocp_Apim_Subscription_Key, query).await.unwrap_or("".to_string());
+
+                send_response(
+                    200,
+                    vec![(String::from("content-type"), String::from("text/plain"))],
+                    format!("profile: {}, search: {}", pro, search_data).as_bytes().to_vec(),
+                )
+            }
             None => send_response(
                 400,
                 vec![(String::from("content-type"), String::from("text/plain"))],
