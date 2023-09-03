@@ -3,7 +3,7 @@ pub mod github_data_fetchers;
 pub mod octocrab_compat;
 pub mod reports;
 pub mod utils;
-use data_analyzers::get_repo_info;
+use data_analyzers::{get_repo_info, get_repo_overview_by_scraper};
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::get_user_data_by_login;
@@ -53,7 +53,7 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         .map(|n| n.to_string());
 
     if let Some(about_repo) = about_repo {
-        match get_repo_info(&github_token, &about_repo).await {
+        match get_repo_overview_by_scraper(&github_token, &about_repo).await {
             None => {
                 send_response(
                     400,

@@ -70,6 +70,49 @@ pub async fn get_repo_info(github_token: &str, about_repo: &str) -> Option<Strin
         return Some(payload);
     }
 }
+pub async fn get_repo_overview_by_scraper(
+    github_token: &str,
+    about_repo: &str,
+) -> Option<String> {
+    let mut _openai = OpenAIFlows::new();
+    _openai.set_retry_times(2);
+    let repo_home_url = format!("https://github.com/{}", about_repo);
+
+    let mut raw_text = String::new();
+    match web_scraper_flows::get_page_text(&repo_home_url).await {
+        Ok(page_text) => raw_text = page_text,
+        Err(_e) => {
+            log::error!("Error getting response from Github: {:?}", _e);
+
+            return None;
+        }
+    }
+
+    let sys_prompt = "Your task is to examine the textual content from a GitHub repo page, emphasizing the Header, About, Release, Contributors, Languages, and README sections. This process should be carried out objectively, focusing on factual information extraction from each segment. Avoid making subjective judgments or inferences. The data should be presented systematically, corresponding to each section. Please note, the provided text will be in a flattened format.";
+
+    let co = ChatOptions {
+        model: chat::ChatModel::GPT35Turbo16K,
+        system_prompt: Some(sys_prompt),
+        restart: true,
+        temperature: Some(0.7),
+        max_tokens: Some(256),
+        ..Default::default()
+    };
+
+    let usr_prompt = &format!("I’ve obtained a flattened text from a GitHub repo page and require analysis of the following sections: 1) Header, with data on Fork, Star, Issues, Pull Request, etc.; 2) About, containing project description, keywords, number of stars, watchers, and forks; 3) Release, with details on the latest release and total releases; 4) Contributors, showing the number of contributors; 5) Languages, displaying the language composition in the project, and 6) README, which is usually a body of text describing the project, please summarize README if longer than 200 words when presenting result. Please extract and present data from these sections individually. Here is the text: {}", raw_text);
+
+    match _openai
+        .chat_completion("repo_overview_99", usr_prompt, &co)
+        .await
+    {
+        Ok(r) => return Some(r.choice),
+        Err(_e) => {
+            log::error!("Error summarizing meta data: {}", _e);
+            return None;
+        }
+    }
+}
+
 pub async fn is_valid_owner_repo_integrated(
     github_token: &str,
     owner: &str,

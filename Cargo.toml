@@ -27,3 +27,4 @@ chrono = { version = "0.4.26", features = ["serde"] }
 webhook-flows = "0.1"
 slack-flows = "0.3.4"
 tiktoken-rs = "0.2.2"
+web-scraper-flows = "0.1.0"
