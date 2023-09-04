@@ -43,14 +43,19 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
                     .await
                     .unwrap_or("".to_string());
 
-                let res = maybe_include_search_data(&pro, &search_data)
-                    .await
-                    .unwrap_or("failed to merge data".to_string());
+                // let res = maybe_include_search_data(&pro, &search_data)
+                //     .await
+                //     .unwrap_or("failed to merge data".to_string());
 
                 send_response(
                     200,
                     vec![(String::from("content-type"), String::from("text/plain"))],
-                    res.as_bytes().to_vec(),
+                    format!(
+                        "Found on profile: {}\nFound with search: {}",
+                        pro, search_data
+                    )
+                    .as_bytes()
+                    .to_vec(),
                 )
             }
             None => send_response(
