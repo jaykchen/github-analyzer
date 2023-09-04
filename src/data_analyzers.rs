@@ -118,7 +118,7 @@ pub async fn maybe_include_search_data(current_data: &str, search_data: &str) ->
     let mut _openai = OpenAIFlows::new();
     _openai.set_retry_times(2);
 
-    let sys_prompt = "Your task is to merge two blocks of text data. The first block is from definitive sources, and the second block is from search results. These two blocks may or may not be related to the same user or project. As a language model, you need to assess whether the data from the search results is about the same user or project as the data from the definitive sources. If they are related, you will need to summarize the two blocks into one unified result. If not just summarize the first block.";
+    let sys_prompt = "Your task involves analyzing two blocks of text data: the primary block, derived from definitive sources, and a secondary block, sourced from miscellaneous search results. Determine whether they relate to the same user or project. If they do, merge the information from both sets into a comprehensive summary, ensuring that the primary block carries more weight and forms the main body of the summary while the secondary block supplements it. If they do not relate, simply summarize the information from the primary block. There’s no need to explain the matching process, just proceed with the task based on your judgment";
 
     let co = ChatOptions {
         model: chat::ChatModel::GPT35Turbo,
@@ -129,7 +129,7 @@ pub async fn maybe_include_search_data(current_data: &str, search_data: &str) ->
         ..Default::default()
     };
 
-    let usr_prompt = &format!("Here are two blocks of text data. The first block: {} is from our verified databases, and the second block: {} is from internet search results. Please analyze both data sets and determine if they refer to the same user or project. If they do, please provide a summary that merges the information from both data sets into one coherent output. If not just summarize the first block.", current_data, search_data);
+    let usr_prompt = &format!("We have two blocks of text data for you to examine. The first block: `{}` comes from our verified databases, and the second block: `{}` is from various search results. Your task is to identify whether they are associated with the same user or project. If they are, provide a summary that combines the information, giving more emphasis to the data from the definitive sources and using the search data to supplement it. If they are not related, just summarize the first block. There’s no need to state why the blocks match or don’t match, simply move forward with your task based on your analysis.", current_data, search_data);
 
     match _openai
         .chat_completion("integrate_99", usr_prompt, &co)
@@ -235,7 +235,7 @@ pub async fn get_repo_overview_by_scraper(github_token: &str, about_repo: &str) 
         ..Default::default()
     };
 
-    let usr_prompt = &format!("I’ve obtained a flattened text from a GitHub repo page and require analysis of the following sections: 1) Header, with data on Fork, Star, Issues, Pull Request, etc.; 2) About, containing project description, keywords, number of stars, watchers, and forks; 3) Release, with details on the latest release and total releases; 4) Contributors, showing the number of contributors; 5) Languages, displaying the language composition in the project, and 6) README, which is usually a body of text describing the project, please summarize README if longer than 200 words when presenting result. Please extract and present data from these sections individually. Here is the text: {}", raw_text);
+    let usr_prompt = &format!("I’ve obtained a flattened text from a GitHub repo page and require analysis of the following sections: 1) Header, with data on Fork, Star, Issues, Pull Request, etc.; 2) About, containing project description, keywords, number of stars, watchers, and forks; 3) Release, with details on the latest release and total releases; 4) Contributors, showing the number of contributors; 5) Languages, displaying the language composition in the project, and 6) README, which is usually a body of text describing the project, please summarize README when presenting result. Please extract and present data from these sections individually. Here is the text: {}", raw_text);
 
     match _openai
         .chat_completion("repo_overview_99", usr_prompt, &co)
