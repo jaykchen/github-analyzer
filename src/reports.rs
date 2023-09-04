@@ -18,6 +18,7 @@ pub async fn weekly_report(
     owner: &str,
     repo: &str,
     user_name: Option<String>,
+    token: Option<String>,
 ) -> String {
     let n_days = 7u16;
     let mut report = Vec::<String>::new();
@@ -45,7 +46,7 @@ pub async fn weekly_report(
 
     let mut commits_summaries = String::new();
     'commits_block: {
-        match get_commits_in_range(&github_token, owner, repo, user_name.clone(), n_days).await {
+        match get_commits_in_range(&github_token, owner, repo, user_name.clone(), n_days, token.clone()).await {
             Some((count, mut commits_vec, weekly_commits_vec)) => {
                 let commits_str = commits_vec
                     .iter()
@@ -64,7 +65,7 @@ pub async fn weekly_report(
                     _ => {}
                 };
                 commits_count = count;
-                match process_commits(&github_token, &mut commits_vec, _turbo, is_sparce).await {
+                match process_commits(&github_token, &mut commits_vec, _turbo, is_sparce, token.clone()).await {
                     Some(summary) => {
                         commits_summaries = summary;
                     }
@@ -88,7 +89,7 @@ pub async fn weekly_report(
     let mut issues_summaries = String::new();
 
     'issues_block: {
-        match get_issues_in_range(&github_token, owner, repo, user_name.clone(), n_days).await {
+        match get_issues_in_range(&github_token, owner, repo, user_name.clone(), n_days, token.clone()).await {
             Some((count, issue_vec)) => {
                 let issues_str = issue_vec
                     .iter()
@@ -115,6 +116,7 @@ pub async fn weekly_report(
                     user_name.clone(),
                     _turbo,
                     is_sparce,
+                    token.clone(),
                 )
                 .await
                 {

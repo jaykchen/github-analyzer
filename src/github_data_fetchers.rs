@@ -368,9 +368,9 @@ pub async fn get_readme_owner_repo(github_token: &str, about_repo: &str) -> Opti
 
     match github_http_fetch(&github_token, &readme_url).await {
         Some(res) => {
-            let text = String::from_utf8(res.clone()).unwrap_or_default();  // Fixed this line
+            let text = String::from_utf8(res.clone()).unwrap_or_default(); // Fixed this line
             slack_flows::send_message_to_channel("ik8", "ch_pro", text).await;
-    
+
             match serde_json::from_slice::<GithubReadme>(&res) {
                 Ok(readme) => {
                     if let Some(c) = readme.content {
@@ -416,6 +416,7 @@ pub async fn get_issues_in_range(
     repo: &str,
     user_name: Option<String>,
     range: u16,
+    token: Option<String>,
 ) -> Option<(usize, Vec<Issue>)> {
     #[derive(Debug, Deserialize)]
     struct Page<T> {
@@ -431,9 +432,12 @@ pub async fn get_issues_in_range(
 
     let query = format!("repo:{owner}/{repo} is:issue {user_str} updated:>{n_days_ago}");
     let encoded_query = urlencoding::encode(&query);
-
+    let token_str = match token {
+        None => String::new(),
+        Some(t) => format!("?token={}", t.as_str()),
+    };
     let url_str = format!(
-        "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100",
+        "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
         encoded_query
     );
 
@@ -523,6 +527,7 @@ pub async fn get_commits_in_range(
     repo: &str,
     user_name: Option<String>,
     range: u16,
+    token: Option<String>,
 ) -> Option<(usize, Vec<GitMemory>, Vec<GitMemory>)> {
     #[derive(Debug, Deserialize, Serialize, Clone)]
     struct User {
@@ -549,9 +554,12 @@ pub async fn get_commits_in_range(
     struct CommitUserDetails {
         date: Option<DateTime<Utc>>,
     }
-
+    let token_str = match &token {
+        None => String::from(""),
+        Some(t) => format!("?token={}", t.as_str()),
+    };
     let base_commit_url =
-        format!("https://api.github.com/repos/{owner}/{repo}/commits?&per_page=100");
+        format!("https://api.github.com/repos/{owner}/{repo}/commits?&per_page=100{token_str}");
 
     let mut git_memory_vec = vec![];
     let mut weekly_git_memory_vec = vec![];

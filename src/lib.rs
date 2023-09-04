@@ -118,8 +118,13 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         .unwrap_or(&Value::Null)
         .as_str()
         .map(|n| n.to_string());
+    let token = _qry
+        .get("token")
+        .unwrap_or(&Value::Null)
+        .as_str()
+        .map(|n| n.to_string());
 
-    let output = weekly_report(github_token, &owner, &repo, user_name).await;
+    let output = weekly_report(github_token, &owner, &repo, user_name, token.clone()).await;
 
     send_response(
         200,

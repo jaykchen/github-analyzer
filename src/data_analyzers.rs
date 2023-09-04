@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use crate::github_data_fetchers::*;
 use crate::octocrab_compat::{Comment, Issue};
 use crate::utils::*;
@@ -364,6 +366,7 @@ pub async fn process_issues(
     target_person: Option<String>,
     _turbo: bool,
     is_sparce: bool,
+    token: Option<String>,
 ) -> Option<(String, usize, Vec<GitMemory>)> {
     let mut issues_summaries = String::new();
     let mut git_memory_vec = vec![];
@@ -375,6 +378,7 @@ pub async fn process_issues(
             target_person.clone(),
             _turbo,
             is_sparce,
+            token.clone(),
         )
         .await
         {
@@ -445,6 +449,7 @@ pub async fn analyze_issue_integrated(
     target_person: Option<String>,
     _turbo: bool,
     is_sparce: bool,
+    token: Option<String>,
 ) -> Option<(String, GitMemory)> {
     let _openai = OpenAIFlows::new();
     let bpe = tiktoken_rs::cl100k_base().unwrap();
@@ -482,10 +487,13 @@ pub async fn analyze_issue_integrated(
         issue_creator_name, issue_title, labels, issue_body
     );
     let mut all_text_tokens = bpe.encode_ordinary(&all_text_from_issue);
-
+    let token_str = match token {
+        None => String::new(),
+        Some(t) => format!("?token={}", t.as_str()),
+    };
     let url_str = format!(
-        "{}/comments?&sort=updated&order=desc&per_page=100",
-        issue_url
+        "{}/comments?&sort=updated&order=desc&per_page=100{}",
+        issue_url, token_str
     );
 
     match github_http_fetch(&github_token, &url_str).await {
@@ -591,10 +599,16 @@ pub async fn analyze_commit_integrated(
     url: &str,
     _turbo: bool,
     is_sparce: bool,
+    token: Option<String>,
 ) -> Option<String> {
     let _openai = OpenAIFlows::new();
 
-    let commit_patch_str = format!("{url}.patch");
+    let token_str = match token {
+        None => String::new(),
+        Some(t) => format!("?token={}", t.as_str()),
+    };
+
+    let commit_patch_str = format!("{url}.patch{token_str}");
     let uri = http_req::uri::Uri::try_from(commit_patch_str.as_str())
         .expect(&format!("Error generating URI from {:?}", commit_patch_str));
     let mut writer = Vec::new();
@@ -743,6 +757,7 @@ pub async fn process_commits(
     inp_vec: &mut Vec<GitMemory>,
     _turbo: bool,
     is_sparce: bool,
+    token: Option<String>,
 ) -> Option<String> {
     let mut commits_summaries = String::new();
     let mut processed_count = 0; // Number of processed entries
@@ -755,6 +770,7 @@ pub async fn process_commits(
             &commit_obj.source_url,
             _turbo,
             is_sparce,
+            token.clone(),
         )
         .await
         {
