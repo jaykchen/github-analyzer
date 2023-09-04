@@ -489,7 +489,7 @@ pub async fn analyze_issue_integrated(
     let mut all_text_tokens = bpe.encode_ordinary(&all_text_from_issue);
     let token_str = match token {
         None => String::new(),
-        Some(t) => format!("?token={}", t.as_str()),
+        Some(t) => format!("&token={}", t.as_str()),
     };
     let url_str = format!(
         "{}/comments?&sort=updated&order=desc&per_page=100{}",
@@ -605,7 +605,7 @@ pub async fn analyze_commit_integrated(
 
     let token_str = match token {
         None => String::new(),
-        Some(t) => format!("?token={}", t.as_str()),
+        Some(t) => format!("&token={}", t.as_str()),
     };
 
     let commit_patch_str = format!("{url}.patch{token_str}");

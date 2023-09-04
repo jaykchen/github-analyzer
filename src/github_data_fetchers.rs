@@ -434,7 +434,7 @@ pub async fn get_issues_in_range(
     let encoded_query = urlencoding::encode(&query);
     let token_str = match token {
         None => String::new(),
-        Some(t) => format!("?token={}", t.as_str()),
+        Some(t) => format!("&token={}", t.as_str()),
     };
     let url_str = format!(
         "https://api.github.com/search/issues?q={}&sort=updated&order=desc&per_page=100{token_str}",
@@ -556,7 +556,7 @@ pub async fn get_commits_in_range(
     }
     let token_str = match &token {
         None => String::from(""),
-        Some(t) => format!("?token={}", t.as_str()),
+        Some(t) => format!("&token={}", t.as_str()),
     };
     let base_commit_url =
         format!("https://api.github.com/repos/{owner}/{repo}/commits?&per_page=100{token_str}");
