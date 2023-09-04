@@ -118,7 +118,7 @@ pub async fn maybe_include_search_data(current_data: &str, search_data: &str) ->
     let mut _openai = OpenAIFlows::new();
     _openai.set_retry_times(2);
 
-    let sys_prompt = "Your task involves analyzing two blocks of text data: the primary block, derived from definitive sources, and a secondary block, sourced from miscellaneous search results. Determine whether they relate to the same user or project. If they do, merge the information from both sets into a comprehensive summary, ensuring that the primary block carries more weight and forms the main body of the summary while the secondary block supplements it. If they do not relate, simply summarize the information from the primary block. There’s no need to explain the matching process, just proceed with the task based on your judgment";
+    let sys_prompt = "Determine if the primary block of text data from definitive sources and the secondary block from search results correspond to the same user or project. If they do, compile the information into a comprehensive summary. If they don’t match, only summarize the primary block. Proceed based on your judgment, without explaining the matching process. Please respond in the following JSON format, leaving a field empty if no information is available, and make a concise summary of available information.";
 
     let co = ChatOptions {
         model: chat::ChatModel::GPT35Turbo,
@@ -129,13 +129,37 @@ pub async fn maybe_include_search_data(current_data: &str, search_data: &str) ->
         ..Default::default()
     };
 
-    let usr_prompt = &format!("We have two blocks of text data for you to examine. The first block: `{}` comes from our verified databases, and the second block: `{}` is from various search results. Your task is to identify whether they are associated with the same user or project. If they are, provide a summary that combines the information, giving more emphasis to the data from the definitive sources and using the search data to supplement it. If they are not related, just summarize the first block. There’s no need to state why the blocks match or don’t match, simply move forward with your task based on your analysis.", current_data, search_data);
+    let usr_prompt = &format!(
+        r#"We have two blocks of text data for you to examine. The first block: `{}` comes from our verified databases, and the second block: `{}` is from various search results. Your task is to identify whether they are associated with the same user or project. If they are, provide a summary that combines the information, giving more emphasis to the data from the definitive sources and using the search data to supplement it. If not, simply summarize the first block. There's no need to explain your matching process, just proceed based on your analysis. Provide your response in the following JSON format, leaving a field blank if no information is present, and make a concise summary of the available data:
+    ```json{{
+        "MatchStatus": "",
+        "Summary": ""
+      }}
+      ```"#,
+        current_data, search_data
+    );
 
     match _openai
         .chat_completion("integrate_99", usr_prompt, &co)
         .await
     {
-        Ok(r) => return Some(r.choice),
+        Ok(r) => {
+            let input = r.choice;
+            let key_string = r#""Summary":"#.to_string();
+
+            if let Some(start) = input.find(&key_string) {
+                let value_start = start + key_string.len();
+                let value_end = match input[value_start..].find("\"") {
+                    Some(end) => end,
+                    None => input.len() - value_start,
+                };
+
+                let value = &input[value_start..value_start + value_end];
+                return Some(value.trim().to_string());
+            } else {
+                return None;
+            }
+        }
         Err(_e) => {
             log::error!("Error consolidating search data: {}", _e);
             return None;
