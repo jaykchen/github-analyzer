@@ -129,6 +129,16 @@ pub async fn maybe_include_search_data(current_data: &str, search_data: &str) ->
         ..Default::default()
     };
 
+    slack_flows::send_message_to_channel(
+        "ik8",
+        "ch_in",
+        format!(
+            "current_data: {}\n search_data: {}",
+            current_data.clone(),
+            search_data.clone()
+        ),
+    )
+    .await;
     let usr_prompt = &format!(
         r#"We have two blocks of text data for you to examine. The first block: `{}` comes from our verified databases, and the second block: `{}` is from various search results. Your task is to identify whether they are associated with the same user or project. If they are, provide a summary that combines the information, giving more emphasis to the data from the definitive sources and using the search data to supplement it. If not, simply summarize the first block. There's no need to explain your matching process, just proceed based on your analysis. Provide your response in the following JSON format, leaving a field blank if no information is present, and make a concise summary of the available data:
     ```json{{
@@ -144,6 +154,7 @@ pub async fn maybe_include_search_data(current_data: &str, search_data: &str) ->
         .await
     {
         Ok(r) => {
+            slack_flows::send_message_to_channel("ik8", "ch_in", r.choice.clone()).await;
             let input = r.choice;
             let key_string = r#""Summary":"#.to_string();
 
