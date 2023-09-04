@@ -11,12 +11,12 @@ use openai_flows::{
 use serde::Deserialize;
 
 pub async fn search_bing(bing_key: &str, query: &str) -> Option<String> {
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     struct QueryContext {
         originalQuery: String,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     struct WebPage {
         id: String,
         name: String,
@@ -29,37 +29,36 @@ pub async fn search_bing(bing_key: &str, query: &str) -> Option<String> {
         isNavigational: bool,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     struct WebPages {
         webSearchUrl: String,
         totalEstimatedMatches: u64,
         value: Vec<WebPage>,
-        someResultsRemoved: bool,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     struct RankingResponse {
         mainline: Mainline,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     struct Mainline {
         items: Vec<Item>,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     struct Item {
         answerType: String,
         resultIndex: u64,
         value: ItemValue,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     struct ItemValue {
         id: String,
     }
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Clone, Deserialize)]
     struct SearchResponse {
         _type: String,
         queryContext: QueryContext,
@@ -70,7 +69,7 @@ pub async fn search_bing(bing_key: &str, query: &str) -> Option<String> {
     let encoded_query = urlencoding::encode(query);
 
     let url_str = format!(
-        "https://api.bing.microsoft.com/v7.0/search?count=5&q={}&responseFilter=Webpages&setLang=en",
+        "https://api.bing.microsoft.com/v7.0/search?count=1&q={}&responseFilter=Webpages&setLang=en",
         encoded_query
     );
 
@@ -100,7 +99,7 @@ pub async fn search_bing(bing_key: &str, query: &str) -> Option<String> {
                         .webPages
                         .value
                         .iter()
-                        .map(|val| format!("url: {}\n snippet: {}", val.url, val.snippet.clone()))
+                        .map(|val| format!("webpage at {} states: {}", val.url, val.snippet))
                         .collect::<Vec<String>>()
                         .join("\n");
 
@@ -111,6 +110,35 @@ pub async fn search_bing(bing_key: &str, query: &str) -> Option<String> {
         Err(_e) => {
             log::error!("Error getting response from Github: {:?}", _e);
             None
+        }
+    }
+}
+
+pub async fn maybe_include_search_data(current_data: &str, search_data: &str) -> Option<String> {
+    let mut _openai = OpenAIFlows::new();
+    _openai.set_retry_times(2);
+
+    let sys_prompt = "Your task is to merge two blocks of text data. The first block is from definitive sources, and the second block is from search results. These two blocks may or may not be related to the same user or project. As a language model, you need to assess whether the data from the search results is about the same user or project as the data from the definitive sources. If they are related, you will need to summarize the two blocks into one unified result. If not just summarize the first block.";
+
+    let co = ChatOptions {
+        model: chat::ChatModel::GPT35Turbo,
+        system_prompt: Some(sys_prompt),
+        restart: true,
+        temperature: Some(0.7),
+        max_tokens: Some(700),
+        ..Default::default()
+    };
+
+    let usr_prompt = &format!("Here are two blocks of text data. The first block: {} is from our verified databases, and the second block: {} is from internet search results. Please analyze both data sets and determine if they refer to the same user or project. If they do, please provide a summary that merges the information from both data sets into one coherent output. If not just summarize the first block.", current_data, search_data);
+
+    match _openai
+        .chat_completion("integrate_99", usr_prompt, &co)
+        .await
+    {
+        Ok(r) => return Some(r.choice),
+        Err(_e) => {
+            log::error!("Error consolidating search data: {}", _e);
+            return None;
         }
     }
 }
@@ -189,6 +217,12 @@ pub async fn get_repo_overview_by_scraper(github_token: &str, about_repo: &str) 
             return None;
         }
     }
+
+    let raw_text = if raw_text.len() > 48_000 {
+        squeeze_fit_post_texts(&raw_text, 12_000, 0.7)
+    } else {
+        raw_text.to_string()
+    };
 
     let sys_prompt = "Your task is to examine the textual content from a GitHub repo page, emphasizing the Header, About, Release, Contributors, Languages, and README sections. This process should be carried out objectively, focusing on factual information extraction from each segment. Avoid making subjective judgments or inferences. The data should be presented systematically, corresponding to each section. Please note, the provided text will be in a flattened format.";
 

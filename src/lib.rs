@@ -3,7 +3,9 @@ pub mod github_data_fetchers;
 pub mod octocrab_compat;
 pub mod reports;
 pub mod utils;
-use data_analyzers::{get_repo_info, get_repo_overview_by_scraper, search_bing};
+use data_analyzers::{
+    get_repo_info, get_repo_overview_by_scraper, maybe_include_search_data, search_bing,
+};
 use dotenv::dotenv;
 use flowsnet_platform_sdk::logger;
 use github_data_fetchers::get_user_data_by_login;
@@ -33,16 +35,22 @@ async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, 
         .map(|n| n.to_string());
 
     if user_login.is_some() {
-        match get_user_data_by_login(&github_token, &user_login.unwrap()).await {
+        match get_user_data_by_login(&github_token, &user_login.clone().unwrap()).await {
             Some(pro) => {
-                let query = "github user whose username:`Michael Yuan` login:juntao";
+                let query = &format!("github user {}", user_login.unwrap());
 
-                let search_data = search_bing(&Ocp_Apim_Subscription_Key, query).await.unwrap_or("".to_string());
+                let search_data = search_bing(&Ocp_Apim_Subscription_Key, query)
+                    .await
+                    .unwrap_or("".to_string());
+
+                let res = maybe_include_search_data(&pro, &search_data)
+                    .await
+                    .unwrap_or("failed to merge data".to_string());
 
                 send_response(
                     200,
                     vec![(String::from("content-type"), String::from("text/plain"))],
-                    format!("profile: {}, search: {}", pro, search_data).as_bytes().to_vec(),
+                    res.as_bytes().to_vec(),
                 )
             }
             None => send_response(
