@@ -34,6 +34,7 @@ pub enum MemoryType {
     Discussion,
     Meta,
 }
+
 pub async fn get_user_profile(github_token: &str, user: &str) -> Option<User> {
     let user_profile_url = format!("https://api.github.com/users/{user}");
 

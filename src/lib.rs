@@ -14,17 +14,21 @@ use serde_json::Value;
 use slack_flows::send_message_to_channel;
 use std::collections::HashMap;
 use std::env;
-use webhook_flows::{request_received, send_response};
+use webhook_flows::{create_endpoint, request_handler, send_response};
+
 #[no_mangle]
 #[tokio::main(flavor = "current_thread")]
-pub async fn run() {
-    dotenv().ok();
-    logger::init();
-
-    request_received(handler).await;
+pub async fn on_deploy() {
+    create_endpoint().await;
 }
 
-async fn handler(_headers: Vec<(String, String)>, _qry: HashMap<String, Value>, _body: Vec<u8>) {
+#[request_handler]
+async fn handler(
+    _headers: Vec<(String, String)>,
+    _subpath: String,
+    _qry: HashMap<String, Value>,
+    _body: Vec<u8>,
+) {
     let github_token = env::var("github_token").expect("github_token was not present in env");
     let Ocp_Apim_Subscription_Key = env::var("bing_key").expect("bing key was not present in env");
 
